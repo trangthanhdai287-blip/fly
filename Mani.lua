@@ -7,7 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM (FIXED QUEST + FIXED HEIGHT + AUTO HAKI)
+-- CẤU HÌNH AUTO FARM (FULL FIXED VERSION)
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
@@ -92,11 +92,12 @@ local AutoQuestEnabled = CONFIG.AutoQuest
 local ActiveTween: Tween? = nil
 local NoclipConn: RBXScriptConnection? = nil
 local BodyVel: BodyVelocity? = nil
+local LastQuestAttempt = 0
 
 local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
--- Bật Buso Haki
+-- Bật Buso Haki (Cường Hóa)
 local function EnableHaki()
     if not CONFIG.AutoHaki then return end
     local char = LocalPlayer.Character
@@ -128,24 +129,38 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[#QUEST_DATABASE]
 end
 
+-- Kiểm tra chính xác trạng thái Quest
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        local mainGui = playerGui:FindFirstChild("Main")
-        if mainGui then
-            local questFrame = mainGui:FindFirstChild("Quest")
-            if questFrame and questFrame.Visible then
+    if not playerGui then return false end
+    
+    local mainGui = playerGui:FindFirstChild("Main")
+    if not mainGui then return false end
+
+    local questFrame = mainGui:FindFirstChild("Quest")
+    if questFrame then
+        if questFrame.Visible then 
+            return true 
+        end
+        local container = questFrame:FindFirstChild("Container") or questFrame:FindFirstChild("Frame")
+        if container then
+            local title = container:FindFirstChild("QuestTitle") or container:FindFirstChild("Title") or container:FindFirstChild("QuestName")
+            if title and title:IsA("TextLabel") and title.Text ~= "" and title.Text ~= "Label" then
                 return true
             end
         end
     end
+    
     return false
 end
 
--- Tối ưu hóa việc nhận Quest (Chờ xác nhận từ Server)
+-- Tối ưu hóa việc nhận Quest (Chống spam NPC)
 local function TakeQuest()
     if not AutoQuestEnabled or HasActiveQuest() then return end
     
+    if os.clock() - LastQuestAttempt < 5 then return end
+    LastQuestAttempt = os.clock()
+
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
     if not hrp then return end
@@ -164,17 +179,12 @@ local function TakeQuest()
         task.wait(tweenTime)
     end
 
-    -- Đứng lại nhận quest và chờ xác nhận
-    local attempts = 0
-    while not HasActiveQuest() and attempts < 5 do
-        if CommF then
-            pcall(function()
-                CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
-            end)
-        end
-        attempts += 1
-        task.wait(0.4)
+    if CommF then
+        pcall(function()
+            CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
+        end)
     end
+    task.wait(0.5)
 end
 
 local function ApplyHitbox(enemy: Model)
@@ -336,7 +346,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (FIXED ALL ERRORS)"
+TitleLabel.Text = "⚡ AUTO FARM (FULL FIXED)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
@@ -462,7 +472,7 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Nhận quest chuẩn xác
+                -- 1. Kiểm tra và nhận quest
                 if AutoQuestEnabled and not HasActiveQuest() then
                     InfoLabel.Text = "Lv: " .. currentLv .. " | Đang nhận Quest..."
                     TakeQuest()
@@ -489,7 +499,7 @@ local function StartFarm()
 
                         if dist > 10 then task.wait(tweenTime) end
 
-                        -- Khóa vị trí lơ lửng trên không chuẩn xác
+                        -- Giữ vị trí lơ lửng trên không
                         while IsFarming and targetHum.Health > 0 and target.Parent do
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
                             ExecuteAttack()
@@ -497,7 +507,7 @@ local function StartFarm()
                         end
                     end
                 else
-                    -- Bay tới bãi chờ quái spawn
+                    -- Bay tới vị trí quái chờ spawn
                     InfoLabel.Text = "Lv: " .. currentLv .. " | Bay đến bãi: " .. qInfo.MobName
                     local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
                     local distToMobPos = (targetMobPos - hrp.Position).Magnitude
