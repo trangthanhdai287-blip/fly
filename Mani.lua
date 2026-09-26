@@ -1,4 +1,4 @@
-l--!strict
+--!strict
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -7,44 +7,83 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM + SMART QUEST (BAY TỚI NPC) + HITBOX
+-- CẤU HÌNH AUTO FARM (FIXED QUEST DETECTION)
 -- ================================================================= --
 local CONFIG = {
-    ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Menu
-    FarmOffset = Vector3.new(0, 9, 0),      -- Độ cao 9 Studs (Lơ lửng an toàn)
+    ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
+    FarmOffset = Vector3.new(0, 10, 0),     -- Độ cao đứng trên đầu quái
     TweenSpeed = 95,                        -- Tốc độ bay
     AutoEquip = true,                       -- Tự lấy vũ khí
-    NoAnimation = true,                     -- BỎ ANIMATION ĐÒN ĐÁNH
-    EnemyFolder = workspace:FindFirstChild("Enemies"),
-    AutoQuest = true,                       -- Tự động nhận Quest theo Level
+    NoAnimation = true,                     -- Bỏ Animation đánh
+    AutoQuest = true,                       -- Tự động nhận Quest
+    AutoHaki = true,                        -- Tự động bật Haki
 
     -- Cấu hình Hitbox
-    AutoHitbox = true,                      -- Bật/Tắt tăng Hitbox quái
-    HitboxSize = Vector3.new(20, 20, 20),   -- Kích thước Hitbox
-    HitboxTransparency = 0.7,               -- Độ trong suốt Hitbox
+    AutoHitbox = true,                      
+    HitboxSize = Vector3.new(25, 25, 25),   
+    HitboxTransparency = 0.7,               
 }
 
--- BẢNG DỮ LIỆU QUEST & TỌA ĐỘ NPC THEO LEVEL (SEA 1)
 type QuestData = { 
     MinLv: number, 
     MaxLv: number, 
     QuestName: string, 
     QuestLevel: number, 
     MobName: string,
-    NpcPos: Vector3 
+    NpcPos: Vector3,
+    MobPos: Vector3
 }
 
 local QUEST_DATABASE: {QuestData} = {
-    { MinLv = 1,   MaxLv = 9,   QuestName = "BanditQuest1",  QuestLevel = 1, MobName = "Bandit",               NpcPos = Vector3.new(1059, 16, 1549) },
-    { MinLv = 10,  MaxLv = 14,  QuestName = "JungleQuest",   QuestLevel = 1, MobName = "Monkey",               NpcPos = Vector3.new(-1598, 37, 153) },
-    { MinLv = 15,  MaxLv = 29,  QuestName = "JungleQuest",   QuestLevel = 2, MobName = "Gorilla",              NpcPos = Vector3.new(-1598, 37, 153) },
-    { MinLv = 30,  MaxLv = 39,  QuestName = "PirateQuest",   QuestLevel = 1, MobName = "Pirate",               NpcPos = Vector3.new(-1140, 4, 3828) },
-    { MinLv = 40,  MaxLv = 59,  QuestName = "PirateQuest",   QuestLevel = 2, MobName = "Brute",                NpcPos = Vector3.new(-1140, 4, 3828) },
-    { MinLv = 60,  MaxLv = 74,  QuestName = "DesertQuest",   QuestLevel = 1, MobName = "Desert Bandit",        NpcPos = Vector3.new(897, 6, 4388) },
-    { MinLv = 75,  MaxLv = 89,  QuestName = "DesertQuest",   QuestLevel = 2, MobName = "Desert Officer",       NpcPos = Vector3.new(897, 6, 4388) },
-    { MinLv = 90,  MaxLv = 99,  QuestName = "SnowQuest",     QuestLevel = 1, MobName = "Snow Bandit",          NpcPos = Vector3.new(1386, 87, -1298) },
-    { MinLv = 100, MaxLv = 119, QuestName = "SnowQuest",     QuestLevel = 2, MobName = "Snowman",              NpcPos = Vector3.new(1386, 87, -1298) },
-    { MinLv = 120, MaxLv = 149, QuestName = "MarineQuest2",  QuestLevel = 1, MobName = "Chief Petty Officer",  NpcPos = Vector3.new(-5030, 28, 4323) },
+    -- SEA 1
+    { MinLv = 1,   MaxLv = 9,   QuestName = "BanditQuest1",  QuestLevel = 1, MobName = "Bandit",               NpcPos = Vector3.new(1059, 16, 1549),   MobPos = Vector3.new(1145, 17, 1634) },
+    { MinLv = 10,  MaxLv = 14,  QuestName = "JungleQuest",   QuestLevel = 1, MobName = "Monkey",               NpcPos = Vector3.new(-1598, 37, 153),   MobPos = Vector3.new(-1448, 50, 63) },
+    { MinLv = 15,  MaxLv = 29,  QuestName = "JungleQuest",   QuestLevel = 2, MobName = "Gorilla",              NpcPos = Vector3.new(-1598, 37, 153),   MobPos = Vector3.new(-1237, 6, -486) },
+    { MinLv = 30,  MaxLv = 39,  QuestName = "PirateQuest",   QuestLevel = 1, MobName = "Pirate",               NpcPos = Vector3.new(-1140, 4, 3828),   MobPos = Vector3.new(-1215, 4, 3915) },
+    { MinLv = 40,  MaxLv = 59,  QuestName = "PirateQuest",   QuestLevel = 2, MobName = "Brute",                NpcPos = Vector3.new(-1140, 4, 3828),   MobPos = Vector3.new(-1145, 14, 4308) },
+    { MinLv = 60,  MaxLv = 74,  QuestName = "DesertQuest",   QuestLevel = 1, MobName = "Desert Bandit",        NpcPos = Vector3.new(897, 6, 4388),    MobPos = Vector3.new(932, 6, 4484) },
+    { MinLv = 75,  MaxLv = 89,  QuestName = "DesertQuest",   QuestLevel = 2, MobName = "Desert Officer",       NpcPos = Vector3.new(897, 6, 4388),    MobPos = Vector3.new(1572, 10, 4374) },
+    { MinLv = 90,  MaxLv = 99,  QuestName = "SnowQuest",     QuestLevel = 1, MobName = "Snow Bandit",          NpcPos = Vector3.new(1386, 87, -1298), MobPos = Vector3.new(1287, 105, -1380) },
+    { MinLv = 100, MaxLv = 119, QuestName = "SnowQuest",     QuestLevel = 2, MobName = "Snowman",              NpcPos = Vector3.new(1386, 87, -1298), MobPos = Vector3.new(1285, 150, -1140) },
+    { MinLv = 120, MaxLv = 149, QuestName = "MarineQuest2",  QuestLevel = 1, MobName = "Chief Petty Officer",  NpcPos = Vector3.new(-5030, 28, 4323), MobPos = Vector3.new(-4855, 22, 4260) },
+    { MinLv = 150, MaxLv = 174, QuestName = "SkyQuest",      QuestLevel = 1, MobName = "Sky Bandit",           NpcPos = Vector3.new(-4842, 717, -2623),MobPos = Vector3.new(-4975, 718, -2885) },
+    { MinLv = 175, MaxLv = 224, QuestName = "SkyQuest",      QuestLevel = 2, MobName = "Dark Master",          NpcPos = Vector3.new(-4842, 717, -2623),MobPos = Vector3.new(-5250, 388, -2250) },
+    { MinLv = 225, MaxLv = 274, QuestName = "ColosseumQuest",QuestLevel = 1, MobName = "Toga Warrior",         NpcPos = Vector3.new(-1575, 7, -2982), MobPos = Vector3.new(-1805, 7, -2745) },
+    { MinLv = 275, MaxLv = 299, QuestName = "ColosseumQuest",QuestLevel = 2, MobName = "Gladiator",            NpcPos = Vector3.new(-1575, 7, -2982), MobPos = Vector3.new(-1385, 7, -3315) },
+    { MinLv = 300, MaxLv = 324, QuestName = "MagmaQuest",    QuestLevel = 1, MobName = "Military Soldier",     NpcPos = Vector3.new(-5313, 12, 8515),  MobPos = Vector3.new(-5415, 78, 8580) },
+    { MinLv = 325, MaxLv = 374, QuestName = "MagmaQuest",    QuestLevel = 2, MobName = "Military Spy",         NpcPos = Vector3.new(-5313, 12, 8515),  MobPos = Vector3.new(-5815, 78, 8820) },
+    { MinLv = 375, MaxLv = 399, QuestName = "FishmanQuest",  QuestLevel = 1, MobName = "Fishman Warrior",      NpcPos = Vector3.new(61122, 18, 1569), MobPos = Vector3.new(60885, 18, 1530) },
+    { MinLv = 400, MaxLv = 449, QuestName = "FishmanQuest",  QuestLevel = 2, MobName = "Fishman Commando",     NpcPos = Vector3.new(61122, 18, 1569), MobPos = Vector3.new(61815, 18, 1470) },
+    { MinLv = 450, MaxLv = 474, QuestName = "SkyExp1Quest",  QuestLevel = 1, MobName = "God's Guard",          NpcPos = Vector3.new(-4720, 845, -1950),MobPos = Vector3.new(-4715, 845, -1865) },
+    { MinLv = 475, MaxLv = 524, QuestName = "SkyExp1Quest",  QuestLevel = 2, MobName = "Shandora Warrior",     NpcPos = Vector3.new(-4720, 845, -1950),MobPos = Vector3.new(-5230, 845, -2250) },
+    { MinLv = 525, MaxLv = 550, QuestName = "SkyExp2Quest",  QuestLevel = 1, MobName = "Royal Squad",          NpcPos = Vector3.new(-7905, 5611, -2280),MobPos = Vector3.new(-7685, 5607, -1450) },
+    { MinLv = 551, MaxLv = 624, QuestName = "SkyExp2Quest",  QuestLevel = 2, MobName = "Royal Soldier",        NpcPos = Vector3.new(-7905, 5611, -2280),MobPos = Vector3.new(-7835, 5607, -1770) },
+    { MinLv = 625, MaxLv = 649, QuestName = "FountainQuest", QuestLevel = 1, MobName = "Galley Pirate",        NpcPos = Vector3.new(5258, 38, 4050),    MobPos = Vector3.new(5585, 38, 3990) },
+    { MinLv = 650, MaxLv = 699, QuestName = "FountainQuest", QuestLevel = 2, MobName = "Galley Captain",       NpcPos = Vector3.new(5258, 38, 4050),    MobPos = Vector3.new(5645, 38, 4950) },
+
+    -- SEA 2
+    { MinLv = 700, MaxLv = 724, QuestName = "Area1Quest",    QuestLevel = 1, MobName = "Raider",               NpcPos = Vector3.new(-425, 73, 1836),   MobPos = Vector3.new(-740, 73, 2380) },
+    { MinLv = 725, MaxLv = 774, QuestName = "Area1Quest",    QuestLevel = 2, MobName = "Mercenary",            NpcPos = Vector3.new(-425, 73, 1836),   MobPos = Vector3.new(-960, 73, 1420) },
+    { MinLv = 775, MaxLv = 799, QuestName = "Area2Quest",    QuestLevel = 1, MobName = "Swan Pirate",          NpcPos = Vector3.new(637, 73, 918),     MobPos = Vector3.new(880, 120, 1210) },
+    { MinLv = 800, MaxLv = 874, QuestName = "Area2Quest",    QuestLevel = 2, MobName = "Factory Staff",        NpcPos = Vector3.new(637, 73, 918),     MobPos = Vector3.new(295, 73, -50) },
+    { MinLv = 875, MaxLv = 899, QuestName = "MarineQuest",   QuestLevel = 1, MobName = "Marine Lieutenant",    NpcPos = Vector3.new(-2440, 73, -3216), MobPos = Vector3.new(-2810, 73, -3030) },
+    { MinLv = 900, MaxLv = 949, QuestName = "MarineQuest",   QuestLevel = 2, MobName = "Marine Captain",       NpcPos = Vector3.new(-2440, 73, -3216), MobPos = Vector3.new(-1880, 73, -3320) },
+    { MinLv = 950, MaxLv = 974, QuestName = "ZombieQuest",   QuestLevel = 1, MobName = "Zombie",               NpcPos = Vector3.new(-5497, 48, -795),  MobPos = Vector3.new(-5630, 48, -710) },
+    { MinLv = 975, MaxLv = 999, QuestName = "ZombieQuest",   QuestLevel = 2, MobName = "Vampire",              NpcPos = Vector3.new(-5497, 48, -795),  MobPos = Vector3.new(-6010, 6, -1310) },
+    { MinLv = 1000,MaxLv = 1049,QuestName = "SnowMountainQuest", QuestLevel = 1, MobName = "Snow Trooper",     NpcPos = Vector3.new(609, 401, -5372),  MobPos = Vector3.new(480, 401, -5300) },
+    { MinLv = 1050,MaxLv = 1099,QuestName = "SnowMountainQuest", QuestLevel = 2, MobName = "Winter Warrior",   NpcPos = Vector3.new(609, 401, -5372),  MobPos = Vector3.new(1180, 430, -5180) },
+    { MinLv = 1100,MaxLv = 1124,QuestName = "IceSideQuest",  QuestLevel = 1, MobName = "Lab Subordinate",      NpcPos = Vector3.new(-6060, 16, -4905), MobPos = Vector3.new(-5780, 16, -4480) },
+    { MinLv = 1125,MaxLv = 1174,QuestName = "IceSideQuest",  QuestLevel = 2, MobName = "Horned Warrior",       NpcPos = Vector3.new(-6060, 16, -4905), MobPos = Vector3.new(-6410, 16, -5840) },
+    { MinLv = 1175,MaxLv = 1199,QuestName = "FireSideQuest", QuestLevel = 1, MobName = "Magma Ninja",         NpcPos = Vector3.new(-5430, 16, -5295), MobPos = Vector3.new(-5430, 16, -5840) },
+    { MinLv = 1200,MaxLv = 1249,QuestName = "FireSideQuest", QuestLevel = 2, MobName = "Lava Pirate",         NpcPos = Vector3.new(-5430, 16, -5295), MobPos = Vector3.new(-5240, 16, -4850) },
+    { MinLv = 1250,MaxLv = 1274,QuestName = "ShipQuest1",    QuestLevel = 1, MobName = "Ship Deckhand",        NpcPos = Vector3.new(1038, 125, 32911), MobPos = Vector3.new(1190, 130, 32980) },
+    { MinLv = 1275,MaxLv = 1299,QuestName = "ShipQuest1",    QuestLevel = 2, MobName = "Ship Engineer",        NpcPos = Vector3.new(1038, 125, 32911), MobPos = Vector3.new(910, 130, 32810) },
+    { MinLv = 1300,MaxLv = 1324,QuestName = "ShipQuest2",    QuestLevel = 1, MobName = "Ship Steward",         NpcPos = Vector3.new(968, 125, 32911),  MobPos = Vector3.new(910, 130, 33410) },
+    { MinLv = 1325,MaxLv = 1349,QuestName = "ShipQuest2",    QuestLevel = 2, MobName = "Clapper",              NpcPos = Vector3.new(968, 125, 32911),  MobPos = Vector3.new(680, 130, 33410) },
+    { MinLv = 1350,MaxLv = 1399,QuestName = "FrostQuest",    QuestLevel = 1, MobName = "Arctic Warrior",       NpcPos = Vector3.new(5667, 28, -6486),  MobPos = Vector3.new(6010, 28, -6210) },
+    { MinLv = 1400,MaxLv = 1424,QuestName = "FrostQuest",    QuestLevel = 2, MobName = "Snow Lurker",          NpcPos = Vector3.new(5667, 28, -6486),  MobPos = Vector3.new(5510, 60, -6810) },
+    { MinLv = 1425,MaxLv = 1474,QuestName = "ForgottenQuest",QuestLevel = 1, MobName = "Sea Soldier",          NpcPos = Vector3.new(-3054, 235, -10142),MobPos = Vector3.new(-3050, 235, -9780) },
+    { MinLv = 1475,MaxLv = 1500,QuestName = "ForgottenQuest",QuestLevel = 2, MobName = "Water Fighter",       NpcPos = Vector3.new(-3054, 235, -10142),MobPos = Vector3.new(-3380, 235, -10580) },
 }
 
 local LocalPlayer = Players.LocalPlayer
@@ -53,13 +92,21 @@ local AutoQuestEnabled = CONFIG.AutoQuest
 local ActiveTween: Tween? = nil
 local NoclipConn: RBXScriptConnection? = nil
 local BodyVel: BodyVelocity? = nil
+local LastQuestAttempt = 0
 
 local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
--- ================================================================= --
--- HỆ THỐNG ĐỌC LEVEL & SMART QUEST
--- ================================================================= --
+local function EnableHaki()
+    if not CONFIG.AutoHaki then return end
+    local char = LocalPlayer.Character
+    if char and not char:FindFirstChild("HasBuso") then
+        if CommF then
+            pcall(function() CommF:InvokeServer("Buso") end)
+        end
+    end
+end
+
 local function GetPlayerLevel(): number
     local data = LocalPlayer:FindFirstChild("Data")
     if data then
@@ -76,49 +123,65 @@ local function GetCurrentQuestInfo(): QuestData
             return qData
         end
     end
-    return QUEST_DATABASE[1]
+    return QUEST_DATABASE[#QUEST_DATABASE]
 end
 
+-- KIỂM TRA CHÍNH XÁC QUEST (ĐÃ LỌC BỎ THANH EXP)
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        local mainGui = playerGui:FindFirstChild("Main")
-        if mainGui then
-            local questFrame = mainGui:FindFirstChild("Quest")
-            if questFrame and questFrame.Visible then
-                return true
+    if not playerGui then return false end
+    
+    local mainGui = playerGui:FindFirstChild("Main")
+    if not mainGui then return false end
+
+    -- 1. Kiểm tra Frame Quest chính của Blox Fruits
+    local questFrame = mainGui:FindFirstChild("Quest")
+    if questFrame then
+        if questFrame.Visible then return true end
+        local container = questFrame:FindFirstChild("Container")
+        if container and container.Visible then return true end
+    end
+
+    -- 2. Kiểm tra chuỗi tiến độ quái (chỉ chấp nhận số lượng quái <= 15, tránh nhầm với Exp)
+    for _, v in ipairs(mainGui:GetDescendants()) do
+        if v:IsA("TextLabel") and v.Visible and v.Name ~= "Exp" then
+            local current, total = string.match(v.Text, "(%d+)/(%d+)")
+            if current and total then
+                local numTotal = tonumber(total)
+                if numTotal and numTotal <= 15 then
+                    return true
+                end
             end
         end
     end
+
     return false
 end
 
--- ================================================================= --
--- HỆ THỐNG TỰ BAY ĐẾN NPC NHẬN QUEST
--- ================================================================= --
 local function TakeQuest()
     if not AutoQuestEnabled or HasActiveQuest() then return end
     
+    if os.clock() - LastQuestAttempt < 3 then return end
+    LastQuestAttempt = os.clock()
+
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
     if not hrp then return end
 
     local qInfo = GetCurrentQuestInfo()
 
-    -- 1. Bay lại gần NPC
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
-    if distToNpc > 15 then
+    if distToNpc > 12 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
         if ActiveTween then ActiveTween:Cancel() end
         
         ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-            CFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
+            CFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 2, 0))
         })
         ActiveTween:Play()
         task.wait(tweenTime)
     end
 
-    -- 2. Gửi Remote nhận Quest khi đã đứng sát NPC
     if CommF then
         pcall(function()
             CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
@@ -127,9 +190,6 @@ local function TakeQuest()
     task.wait(0.5)
 end
 
--- ================================================================= --
--- HỆ THỐNG TĂNG HITBOX QUÁI
--- ================================================================= --
 local function ApplyHitbox(enemy: Model)
     if not CONFIG.AutoHitbox then return end
     for _, part in ipairs(enemy:GetDescendants()) do
@@ -143,9 +203,6 @@ local function ApplyHitbox(enemy: Model)
     end
 end
 
--- ================================================================= --
--- HỆ THỐNG TRIỆT HẠ ANIMATION ĐÒN ĐÁNH (NO ANIMATION)
--- ================================================================= --
 local function HookNoAnim(char: Model)
     local hum = char:WaitForChild("Humanoid", 5) :: Humanoid?
     if not hum then return end
@@ -158,7 +215,6 @@ local function HookNoAnim(char: Model)
                 or track.AnimationPriority == Enum.AnimationPriority.Action2 
                 or track.AnimationPriority == Enum.AnimationPriority.Action3 
                 or track.AnimationPriority == Enum.AnimationPriority.Action4 then
-                
                 track:Stop(0)
             end
         end
@@ -168,12 +224,11 @@ end
 if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
--- ================================================================= --
--- HỆ THỐNG XẢ DAME FAST ATTACK (TỐI ƯU AN TOÀN)
--- ================================================================= --
 local function ExecuteAttack()
     local char = LocalPlayer.Character
     if not char then return end
+
+    EnableHaki()
 
     if CONFIG.AutoEquip then
         local tool = char:FindFirstChildOfClass("Tool")
@@ -197,9 +252,6 @@ local function ExecuteAttack()
     end
 end
 
--- ================================================================= --
--- KHÓA VẬT LÝ & NOCLIP
--- ================================================================= --
 local function EnablePhysics(hrp: BasePart)
     if not BodyVel or BodyVel.Parent ~= hrp then
         if BodyVel then BodyVel:Destroy() end
@@ -226,11 +278,12 @@ local function DisablePhysics()
     if NoclipConn then NoclipConn:Disconnect() NoclipConn = nil end
 end
 
--- Quét quái chuẩn theo Quest & Tự động áp dụng Hitbox
 local function GetTargetEnemy(): Model?
     local char = LocalPlayer.Character
     local myHrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart
-    if not myHrp or not CONFIG.EnemyFolder then return nil end
+    local enemyFolder = workspace:FindFirstChild("Enemies")
+    
+    if not myHrp or not enemyFolder then return nil end
 
     local qInfo = GetCurrentQuestInfo()
     local targetMobName = qInfo.MobName
@@ -238,7 +291,7 @@ local function GetTargetEnemy(): Model?
     local closest: Model? = nil
     local minDist = math.huge
 
-    for _, enemy in ipairs(CONFIG.EnemyFolder:GetChildren()) do
+    for _, enemy in ipairs(enemyFolder:GetChildren()) do
         if enemy:IsA("Model") then
             if targetMobName == "" or string.find(enemy.Name, targetMobName) then
                 local hum = enemy:FindFirstChildOfClass("Humanoid")
@@ -258,9 +311,7 @@ local function GetTargetEnemy(): Model?
     return closest
 end
 
--- ================================================================= --
--- GIAO DIỆN BẢNG ĐIỀU KHIỂN (GUI)
--- ================================================================= --
+-- GUI CONTROL
 local function GetGuiParent(): Instance
     local success, result = pcall(function() return game:GetService("CoreGui") end)
     if success and result then return result end
@@ -277,7 +328,7 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = ParentGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 270, 0, 260)
+MainFrame.Size = UDim2.new(0, 270, 0, 310)
 MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 MainFrame.BorderSizePixel = 0
@@ -296,7 +347,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (SMART NPC TWEEN)"
+TitleLabel.Text = "⚡ AUTO FARM (FIXED QUEST)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
@@ -344,11 +395,25 @@ local HitboxBtnCorner = Instance.new("UICorner")
 HitboxBtnCorner.CornerRadius = UDim.new(0, 6)
 HitboxBtnCorner.Parent = HitboxBtn
 
+local HakiBtn = Instance.new("TextButton")
+HakiBtn.Size = UDim2.new(0.85, 0, 0, 38)
+HakiBtn.Position = UDim2.new(0.075, 0, 0, 178)
+HakiBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+HakiBtn.Text = "AUTO HAKI: ON"
+HakiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HakiBtn.TextSize = 12
+HakiBtn.Font = Enum.Font.GothamBold
+HakiBtn.Parent = MainFrame
+
+local HakiBtnCorner = Instance.new("UICorner")
+HakiBtnCorner.CornerRadius = UDim.new(0, 6)
+HakiBtnCorner.Parent = HakiBtn
+
 local InfoLabel = Instance.new("TextLabel")
 InfoLabel.Size = UDim2.new(1, -20, 0, 45)
-InfoLabel.Position = UDim2.new(0, 10, 0, 178)
+InfoLabel.Position = UDim2.new(0, 10, 0, 224)
 InfoLabel.BackgroundTransparency = 1
-InfoLabel.Text = "Lv: " .. GetPlayerLevel() .. " | Auto NPC Tween"
+InfoLabel.Text = "Lv: " .. GetPlayerLevel() .. " | Status: Ready"
 InfoLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
 InfoLabel.TextSize = 11
 InfoLabel.Font = Enum.Font.GothamMedium
@@ -378,9 +443,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- ================================================================= --
--- VÒNG LẶP CHÍNH AUTO FARM
--- ================================================================= --
+-- VÒNG LẶP CHÍNH (FARM LOOP)
 local function StopFarm()
     IsFarming = false
     if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
@@ -403,19 +466,22 @@ local function StartFarm()
 
             if hrp and hum and hum.Health > 0 then
                 EnablePhysics(hrp)
+                EnableHaki()
 
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
-                InfoLabel.Text = "Lv: " .. currentLv .. " | Target: " .. qInfo.MobName
 
-                -- 1. Nếu chưa nhận Quest -> Tự động bay lại NPC nhận Quest
+                -- 1. Kiểm tra và nhận quest
                 if AutoQuestEnabled and not HasActiveQuest() then
+                    InfoLabel.Text = "Lv: " .. currentLv .. " | Đang bay nhận Quest..."
                     TakeQuest()
                 end
 
-                -- 2. Đánh quái khi đã nhận Quest
+                -- 2. Đánh quái
                 local target = GetTargetEnemy()
+
                 if target then
+                    InfoLabel.Text = "Lv: " .. currentLv .. " | Target: " .. qInfo.MobName
                     local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart
                     local targetHum = target:FindFirstChildOfClass("Humanoid")
 
@@ -435,8 +501,22 @@ local function StartFarm()
                         while IsFarming and targetHum.Health > 0 and target.Parent do
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
                             ExecuteAttack()
-                            task.wait(0.12) -- Giảm nhẹ tốc độ đánh để tránh văng Game
+                            task.wait(0.12)
                         end
+                    end
+                else
+                    InfoLabel.Text = "Lv: " .. currentLv .. " | Bay đến bãi: " .. qInfo.MobName
+                    local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
+                    local distToMobPos = (targetMobPos - hrp.Position).Magnitude
+
+                    if distToMobPos > 15 then
+                        local tweenTime = math.max(0.1, distToMobPos / CONFIG.TweenSpeed)
+                        if ActiveTween then ActiveTween:Cancel() end
+                        ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+                            CFrame = CFrame.new(targetMobPos)
+                        })
+                        ActiveTween:Play()
+                        task.wait(tweenTime)
                     end
                 end
             end
@@ -471,6 +551,18 @@ HitboxBtn.MouseButton1Click:Connect(function()
     else
         HitboxBtn.Text = "AUTO HITBOX: OFF"
         HitboxBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+    end
+end)
+
+HakiBtn.MouseButton1Click:Connect(function()
+    CONFIG.AutoHaki = not CONFIG.AutoHaki
+    if CONFIG.AutoHaki then
+        HakiBtn.Text = "AUTO HAKI: ON"
+        HakiBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+        EnableHaki()
+    else
+        HakiBtn.Text = "AUTO HAKI: OFF"
+        HakiBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
     end
 end)
 
