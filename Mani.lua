@@ -7,7 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM + FULL SEA 1 & SEA 2 QUEST + HITBOX
+-- CẤU HÌNH AUTO FARM + QUEST + HITBOX + AUTO HAKI
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
@@ -16,6 +16,7 @@ local CONFIG = {
     AutoEquip = true,                       -- Tự lấy vũ khí
     NoAnimation = true,                     -- Bỏ Animation đánh
     AutoQuest = true,                       -- Tự động nhận Quest
+    AutoHaki = true,                        -- Tự động bật Haki Vũ Khí (Buso)
 
     -- Cấu hình Hitbox
     AutoHitbox = true,                      
@@ -95,6 +96,21 @@ local BodyVel: BodyVelocity? = nil
 
 local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
+
+-- ================================================================= --
+-- HỆ THỐNG XỬ LÝ HAKI VŨ KHÍ (BUSO HAKI)
+-- ================================================================= --
+local function EnableHaki()
+    if not CONFIG.AutoHaki then return end
+    local char = LocalPlayer.Character
+    if char and not char:FindFirstChild("HasBuso") then
+        if CommF then
+            pcall(function()
+                CommF:InvokeServer("Buso")
+            end)
+        end
+    end
+end
 
 -- ================================================================= --
 -- HỆ THỐNG KIỂM TRA LEVEL & QUEST LOGIC
@@ -205,6 +221,8 @@ local function ExecuteAttack()
     local char = LocalPlayer.Character
     if not char then return end
 
+    EnableHaki() -- Tự động kích hoạt Haki nếu chưa bật
+
     if CONFIG.AutoEquip then
         local tool = char:FindFirstChildOfClass("Tool")
         if not tool then
@@ -305,7 +323,7 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = ParentGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 270, 0, 260)
+MainFrame.Size = UDim2.new(0, 270, 0, 310)
 MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 MainFrame.BorderSizePixel = 0
@@ -324,7 +342,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (FIXED QUEST TWEEN)"
+TitleLabel.Text = "⚡ AUTO FARM (WITH AUTO HAKI)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
@@ -372,9 +390,23 @@ local HitboxBtnCorner = Instance.new("UICorner")
 HitboxBtnCorner.CornerRadius = UDim.new(0, 6)
 HitboxBtnCorner.Parent = HitboxBtn
 
+local HakiBtn = Instance.new("TextButton")
+HakiBtn.Size = UDim2.new(0.85, 0, 0, 38)
+HakiBtn.Position = UDim2.new(0.075, 0, 0, 178)
+HakiBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+HakiBtn.Text = "AUTO HAKI: ON"
+HakiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HakiBtn.TextSize = 12
+HakiBtn.Font = Enum.Font.GothamBold
+HakiBtn.Parent = MainFrame
+
+local HakiBtnCorner = Instance.new("UICorner")
+HakiBtnCorner.CornerRadius = UDim.new(0, 6)
+HakiBtnCorner.Parent = HakiBtn
+
 local InfoLabel = Instance.new("TextLabel")
 InfoLabel.Size = UDim2.new(1, -20, 0, 45)
-InfoLabel.Position = UDim2.new(0, 10, 0, 178)
+InfoLabel.Position = UDim2.new(0, 10, 0, 224)
 InfoLabel.BackgroundTransparency = 1
 InfoLabel.Text = "Lv: " .. GetPlayerLevel() .. " | Status: Ready"
 InfoLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
@@ -407,7 +439,7 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- ================================================================= --
--- VÒNG LẶP CHÍNH (MAIN FARM LOOP) - ĐÃ SỬA LỖI ĐỨNG YÊN Ở NPC
+-- VÒNG LẶP CHÍNH (MAIN FARM LOOP)
 -- ================================================================= --
 local function StopFarm()
     IsFarming = false
@@ -431,6 +463,7 @@ local function StartFarm()
 
             if hrp and hum and hum.Health > 0 then
                 EnablePhysics(hrp)
+                EnableHaki()
 
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
@@ -445,7 +478,6 @@ local function StartFarm()
                 local target = GetTargetEnemy()
 
                 if target then
-                    -- Đã thấy quái -> Bay đến vị trí quái và đánh
                     InfoLabel.Text = "Lv: " .. currentLv .. " | Target: " .. qInfo.MobName
                     local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart
                     local targetHum = target:FindFirstChildOfClass("Humanoid")
@@ -470,7 +502,7 @@ local function StartFarm()
                         end
                     end
                 else
-                    -- BỔ SUNG QUAN TRỌNG: Nếu không thấy quái trong Enemies -> Bay ngay đến bãi farm (MobPos)
+                    -- Nếu không thấy quái trong Enemies -> Bay đến bãi farm (MobPos)
                     InfoLabel.Text = "Lv: " .. currentLv .. " | Bay đến bãi: " .. qInfo.MobName
                     local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
                     local distToMobPos = (targetMobPos - hrp.Position).Magnitude
@@ -517,6 +549,18 @@ HitboxBtn.MouseButton1Click:Connect(function()
     else
         HitboxBtn.Text = "AUTO HITBOX: OFF"
         HitboxBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+    end
+end)
+
+HakiBtn.MouseButton1Click:Connect(function()
+    CONFIG.AutoHaki = not CONFIG.AutoHaki
+    if CONFIG.AutoHaki then
+        HakiBtn.Text = "AUTO HAKI: ON"
+        HakiBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+        EnableHaki()
+    else
+        HakiBtn.Text = "AUTO HAKI: OFF"
+        HakiBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
     end
 end)
 
