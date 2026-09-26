@@ -97,7 +97,6 @@ local LastQuestAttempt = 0
 local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
--- Bật Buso Haki (Cường Hóa)
 local function EnableHaki()
     if not CONFIG.AutoHaki then return end
     local char = LocalPlayer.Character
@@ -129,7 +128,7 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[#QUEST_DATABASE]
 end
 
--- Kiểm tra chính xác trạng thái Quest
+-- KIỂM TRA QUEST DỰA TRÊN CHUỖI TIẾN ĐỘ "X/Y"
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
@@ -137,24 +136,24 @@ local function HasActiveQuest(): boolean
     local mainGui = playerGui:FindFirstChild("Main")
     if not mainGui then return false end
 
+    -- 1. Kiểm tra trực tiếp Frame Quest
     local questFrame = mainGui:FindFirstChild("Quest")
-    if questFrame then
-        if questFrame.Visible then 
-            return true 
-        end
-        local container = questFrame:FindFirstChild("Container") or questFrame:FindFirstChild("Frame")
-        if container then
-            local title = container:FindFirstChild("QuestTitle") or container:FindFirstChild("Title") or container:FindFirstChild("QuestName")
-            if title and title:IsA("TextLabel") and title.Text ~= "" and title.Text ~= "Label" then
+    if questFrame and questFrame.Visible then
+        return true
+    end
+
+    -- 2. Quét biểu thức tiến độ dạng "1/8", "0/8" trên toàn bộ giao diện Main GUI
+    for _, v in ipairs(mainGui:GetDescendants()) do
+        if v:IsA("TextLabel") and v.Visible and v.Text ~= "" then
+            if string.find(v.Text, "%d+/%d+") then
                 return true
             end
         end
     end
-    
+
     return false
 end
 
--- Tối ưu hóa việc nhận Quest (Chống spam NPC)
 local function TakeQuest()
     if not AutoQuestEnabled or HasActiveQuest() then return end
     
@@ -308,9 +307,7 @@ local function GetTargetEnemy(): Model?
     return closest
 end
 
--- ================================================================= --
--- GIAO DIỆN GUI ĐIỀU KHIỂN
--- ================================================================= --
+-- GUI CONTROL
 local function GetGuiParent(): Instance
     local success, result = pcall(function() return game:GetService("CoreGui") end)
     if success and result then return result end
@@ -442,9 +439,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- ================================================================= --
 -- VÒNG LẶP CHÍNH (FARM LOOP)
--- ================================================================= --
 local function StopFarm()
     IsFarming = false
     if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
@@ -499,7 +494,6 @@ local function StartFarm()
 
                         if dist > 10 then task.wait(tweenTime) end
 
-                        -- Giữ vị trí lơ lửng trên không
                         while IsFarming and targetHum.Health > 0 and target.Parent do
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
                             ExecuteAttack()
@@ -507,7 +501,6 @@ local function StartFarm()
                         end
                     end
                 else
-                    -- Bay tới vị trí quái chờ spawn
                     InfoLabel.Text = "Lv: " .. currentLv .. " | Bay đến bãi: " .. qInfo.MobName
                     local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
                     local distToMobPos = (targetMobPos - hrp.Position).Magnitude
