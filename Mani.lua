@@ -7,24 +7,22 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM + FULL SEA 1 & SEA 2 QUEST + HITBOX
+-- CẤU HÌNH AUTO FARM AUTO-SEA DETECT
 -- ================================================================= --
 local CONFIG = {
-    ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Menu
-    FarmOffset = Vector3.new(0, 9, 0),      -- Độ cao 9 Studs
-    TweenSpeed = 95,                        -- Tốc độ bay
-    AutoEquip = true,                       -- Tự lấy vũ khí
-    NoAnimation = true,                     -- Bỏ Animation đánh
+    ToggleKey = Enum.KeyCode.F,             
+    FarmOffset = Vector3.new(0, 9, 0),      
+    TweenSpeed = 95,                        
+    AutoEquip = true,                       
+    NoAnimation = true,                     
     EnemyFolder = workspace:FindFirstChild("Enemies"),
-    AutoQuest = true,                       -- Tự động nhận Quest
+    AutoQuest = true,                       
 
-    -- Cấu hình Hitbox
     AutoHitbox = true,                      
     HitboxSize = Vector3.new(20, 20, 20),   
     HitboxTransparency = 0.7,               
 }
 
--- BẢNG DỮ LIỆU QUEST FULL SEA 1 & SEA 2 (ĐẾN LEVEL 1500)
 type QuestData = { 
     MinLv: number, 
     MaxLv: number, 
@@ -34,8 +32,8 @@ type QuestData = {
     NpcPos: Vector3 
 }
 
-local QUEST_DATABASE: {QuestData} = {
-    -- SEA 1
+-- BẢNG DỮ LIỆU SEA 1
+local QUEST_SEA1: {QuestData} = {
     { MinLv = 1,   MaxLv = 9,   QuestName = "BanditQuest1",  QuestLevel = 1, MobName = "Bandit",               NpcPos = Vector3.new(1059, 16, 1549) },
     { MinLv = 10,  MaxLv = 14,  QuestName = "JungleQuest",   QuestLevel = 1, MobName = "Monkey",               NpcPos = Vector3.new(-1598, 37, 153) },
     { MinLv = 15,  MaxLv = 29,  QuestName = "JungleQuest",   QuestLevel = 2, MobName = "Gorilla",              NpcPos = Vector3.new(-1598, 37, 153) },
@@ -59,9 +57,11 @@ local QUEST_DATABASE: {QuestData} = {
     { MinLv = 525, MaxLv = 550, QuestName = "SkyExp2Quest",  QuestLevel = 1, MobName = "Royal Squad",          NpcPos = Vector3.new(-7905, 5611, -2280) },
     { MinLv = 551, MaxLv = 624, QuestName = "SkyExp2Quest",  QuestLevel = 2, MobName = "Royal Soldier",        NpcPos = Vector3.new(-7905, 5611, -2280) },
     { MinLv = 625, MaxLv = 649, QuestName = "FountainQuest", QuestLevel = 1, MobName = "Galley Pirate",        NpcPos = Vector3.new(5258, 38, 4050) },
-    { MinLv = 650, MaxLv = 699, QuestName = "FountainQuest", QuestLevel = 2, MobName = "Galley Captain",       NpcPos = Vector3.new(5258, 38, 4050) },
+    { MinLv = 650, MaxLv = 7000,QuestName = "FountainQuest", QuestLevel = 2, MobName = "Galley Captain",       NpcPos = Vector3.new(5258, 38, 4050) },
+}
 
-    -- SEA 2
+-- BẢNG DỮ LIỆU SEA 2
+local QUEST_SEA2: {QuestData} = {
     { MinLv = 700, MaxLv = 724, QuestName = "Area1Quest",    QuestLevel = 1, MobName = "Raider",               NpcPos = Vector3.new(-425, 73, 1836) },
     { MinLv = 725, MaxLv = 774, QuestName = "Area1Quest",    QuestLevel = 2, MobName = "Mercenary",            NpcPos = Vector3.new(-425, 73, 1836) },
     { MinLv = 775, MaxLv = 799, QuestName = "Area2Quest",    QuestLevel = 1, MobName = "Swan Pirate",          NpcPos = Vector3.new(637, 73, 918) },
@@ -83,7 +83,7 @@ local QUEST_DATABASE: {QuestData} = {
     { MinLv = 1350,MaxLv = 1399,QuestName = "FrostQuest",    QuestLevel = 1, MobName = "Arctic Warrior",       NpcPos = Vector3.new(5667, 28, -6486) },
     { MinLv = 1400,MaxLv = 1424,QuestName = "FrostQuest",    QuestLevel = 2, MobName = "Snow Lurker",          NpcPos = Vector3.new(5667, 28, -6486) },
     { MinLv = 1425,MaxLv = 1474,QuestName = "ForgottenQuest",QuestLevel = 1, MobName = "Sea Soldier",          NpcPos = Vector3.new(-3054, 235, -10142) },
-    { MinLv = 1475,MaxLv = 1500,QuestName = "ForgottenQuest",QuestLevel = 2, MobName = "Water Fighter",       NpcPos = Vector3.new(-3054, 235, -10142) },
+    { MinLv = 1475,MaxLv = 7000,QuestName = "ForgottenQuest",QuestLevel = 2, MobName = "Water Fighter",       NpcPos = Vector3.new(-3054, 235, -10142) },
 }
 
 local LocalPlayer = Players.LocalPlayer
@@ -96,9 +96,6 @@ local BodyVel: BodyVelocity? = nil
 local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
--- ================================================================= --
--- HỆ THỐNG ĐỌC LEVEL & SMART QUEST (ĐÃ SỬA LỖI FALLBACK)
--- ================================================================= --
 local function GetPlayerLevel(): number
     local data = LocalPlayer:FindFirstChild("Data")
     if data then
@@ -108,15 +105,28 @@ local function GetPlayerLevel(): number
     return 1
 end
 
+-- TỰ ĐỘNG NHẬN DIỆN SEA
 local function GetCurrentQuestInfo(): QuestData
     local myLevel = GetPlayerLevel()
-    for _, qData in ipairs(QUEST_DATABASE) do
-        if myLevel >= qData.MinLv and myLevel <= qData.MaxLv then
-            return qData
+    local placeId = game.PlaceId
+    
+    -- Nếu đang ở Sea 2
+    if placeId == 4442272183 then
+        for _, qData in ipairs(QUEST_SEA2) do
+            if myLevel >= qData.MinLv and myLevel <= qData.MaxLv then
+                return qData
+            end
         end
+        return QUEST_SEA2[#QUEST_SEA2]
+    else
+        -- Mặc định ở Sea 1
+        for _, qData in ipairs(QUEST_SEA1) do
+            if myLevel >= qData.MinLv and myLevel <= qData.MaxLv then
+                return qData
+            end
+        end
+        return QUEST_SEA1[#QUEST_SEA1]
     end
-    -- Nếu Level vượt quá bảng dữ liệu -> Lấy Quest cuối cùng thay vì nhảy về Bandit
-    return QUEST_DATABASE[#QUEST_DATABASE]
 end
 
 local function HasActiveQuest(): boolean
@@ -142,7 +152,6 @@ local function TakeQuest()
 
     local qInfo = GetCurrentQuestInfo()
 
-    -- Bay đến NPC nhận Quest
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
     if distToNpc > 15 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
@@ -163,9 +172,6 @@ local function TakeQuest()
     task.wait(0.5)
 end
 
--- ================================================================= --
--- HỆ THỐNG HITBOX & NO ANIMATION
--- ================================================================= --
 local function ApplyHitbox(enemy: Model)
     if not CONFIG.AutoHitbox then return end
     for _, part in ipairs(enemy:GetDescendants()) do
@@ -201,9 +207,6 @@ end
 if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
--- ================================================================= --
--- HỆ THỐNG XẢ DAME
--- ================================================================= --
 local function ExecuteAttack()
     local char = LocalPlayer.Character
     if not char then return end
@@ -287,9 +290,6 @@ local function GetTargetEnemy(): Model?
     return closest
 end
 
--- ================================================================= --
--- GIAO DIỆN GUI
--- ================================================================= --
 local function GetGuiParent(): Instance
     local success, result = pcall(function() return game:GetService("CoreGui") end)
     if success and result then return result end
@@ -325,7 +325,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (FIXED LEVEL 800+)"
+TitleLabel.Text = "⚡ AUTO FARM (AUTO SEA DETECT)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
@@ -377,14 +377,13 @@ local InfoLabel = Instance.new("TextLabel")
 InfoLabel.Size = UDim2.new(1, -20, 0, 45)
 InfoLabel.Position = UDim2.new(0, 10, 0, 178)
 InfoLabel.BackgroundTransparency = 1
-InfoLabel.Text = "Lv: " .. GetPlayerLevel() .. " | Fixed Target"
+InfoLabel.Text = "Lv: " .. GetPlayerLevel() .. " | Auto Sea Active"
 InfoLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
 InfoLabel.TextSize = 11
 InfoLabel.Font = Enum.Font.GothamMedium
 InfoLabel.TextWrapped = true
 InfoLabel.Parent = MainFrame
 
--- Kéo thả GUI
 local dragging, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -407,9 +406,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- ================================================================= --
--- VÒNG LẶP AUTO FARM
--- ================================================================= --
 local function StopFarm()
     IsFarming = false
     if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
