@@ -7,24 +7,23 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM + QUEST + HITBOX + AUTO HAKI
+-- CẤU HÌNH AUTO FARM (FIXED QUEST + FIXED HEIGHT + AUTO HAKI)
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
-    FarmOffset = Vector3.new(0, 9, 0),      -- Độ cao đứng trên đầu quái (9 Studs)
+    FarmOffset = Vector3.new(0, 10, 0),     -- Độ cao đứng trên đầu quái (10 Studs)
     TweenSpeed = 95,                        -- Tốc độ bay
     AutoEquip = true,                       -- Tự lấy vũ khí
     NoAnimation = true,                     -- Bỏ Animation đánh
     AutoQuest = true,                       -- Tự động nhận Quest
-    AutoHaki = true,                        -- Tự động bật Haki Vũ Khí (Buso)
+    AutoHaki = true,                        -- Tự động bật Haki (Cường Hóa)
 
     -- Cấu hình Hitbox
     AutoHitbox = true,                      
-    HitboxSize = Vector3.new(20, 20, 20),   
+    HitboxSize = Vector3.new(25, 25, 25),   
     HitboxTransparency = 0.7,               
 }
 
--- BẢNG DỮ LIỆU QUEST + TỌA ĐỘ BÃI FARM (MobPos) FULL SEA 1 & SEA 2
 type QuestData = { 
     MinLv: number, 
     MaxLv: number, 
@@ -97,9 +96,7 @@ local BodyVel: BodyVelocity? = nil
 local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
--- ================================================================= --
--- HỆ THỐNG XỬ LÝ HAKI VŨ KHÍ (BUSO HAKI)
--- ================================================================= --
+-- Bật Buso Haki
 local function EnableHaki()
     if not CONFIG.AutoHaki then return end
     local char = LocalPlayer.Character
@@ -112,9 +109,6 @@ local function EnableHaki()
     end
 end
 
--- ================================================================= --
--- HỆ THỐNG KIỂM TRA LEVEL & QUEST LOGIC
--- ================================================================= --
 local function GetPlayerLevel(): number
     local data = LocalPlayer:FindFirstChild("Data")
     if data then
@@ -148,6 +142,7 @@ local function HasActiveQuest(): boolean
     return false
 end
 
+-- Tối ưu hóa việc nhận Quest (Chờ xác nhận từ Server)
 local function TakeQuest()
     if not AutoQuestEnabled or HasActiveQuest() then return end
     
@@ -158,28 +153,30 @@ local function TakeQuest()
     local qInfo = GetCurrentQuestInfo()
 
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
-    if distToNpc > 15 then
+    if distToNpc > 12 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
         if ActiveTween then ActiveTween:Cancel() end
         
         ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-            CFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
+            CFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 2, 0))
         })
         ActiveTween:Play()
         task.wait(tweenTime)
     end
 
-    if CommF then
-        pcall(function()
-            CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
-        end)
+    -- Đứng lại nhận quest và chờ xác nhận
+    local attempts = 0
+    while not HasActiveQuest() and attempts < 5 do
+        if CommF then
+            pcall(function()
+                CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
+            end)
+        end
+        attempts += 1
+        task.wait(0.4)
     end
-    task.wait(0.5)
 end
 
--- ================================================================= --
--- HỆ THỐNG HITBOX & HOOK ANIMATION
--- ================================================================= --
 local function ApplyHitbox(enemy: Model)
     if not CONFIG.AutoHitbox then return end
     for _, part in ipairs(enemy:GetDescendants()) do
@@ -214,14 +211,11 @@ end
 if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
--- ================================================================= --
--- HỆ THỐNG XẢ DAME & VẬT LÝ (NOCLIP + ANTI-GRAVITY)
--- ================================================================= --
 local function ExecuteAttack()
     local char = LocalPlayer.Character
     if not char then return end
 
-    EnableHaki() -- Tự động kích hoạt Haki nếu chưa bật
+    EnableHaki()
 
     if CONFIG.AutoEquip then
         local tool = char:FindFirstChildOfClass("Tool")
@@ -342,7 +336,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (WITH AUTO HAKI)"
+TitleLabel.Text = "⚡ AUTO FARM (FIXED ALL ERRORS)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
@@ -415,7 +409,7 @@ InfoLabel.Font = Enum.Font.GothamMedium
 InfoLabel.TextWrapped = true
 InfoLabel.Parent = MainFrame
 
--- Logic Kéo Thả GUI
+-- Kéo thả GUI
 local dragging, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -439,7 +433,7 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- ================================================================= --
--- VÒNG LẶP CHÍNH (MAIN FARM LOOP)
+-- VÒNG LẶP CHÍNH (FARM LOOP)
 -- ================================================================= --
 local function StopFarm()
     IsFarming = false
@@ -468,13 +462,13 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Nhận quest nếu chưa có
+                -- 1. Nhận quest chuẩn xác
                 if AutoQuestEnabled and not HasActiveQuest() then
                     InfoLabel.Text = "Lv: " .. currentLv .. " | Đang nhận Quest..."
                     TakeQuest()
                 end
 
-                -- 2. Tìm quái mục tiêu
+                -- 2. Đánh quái
                 local target = GetTargetEnemy()
 
                 if target then
@@ -495,6 +489,7 @@ local function StartFarm()
 
                         if dist > 10 then task.wait(tweenTime) end
 
+                        -- Khóa vị trí lơ lửng trên không chuẩn xác
                         while IsFarming and targetHum.Health > 0 and target.Parent do
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
                             ExecuteAttack()
@@ -502,7 +497,7 @@ local function StartFarm()
                         end
                     end
                 else
-                    -- Nếu không thấy quái trong Enemies -> Bay đến bãi farm (MobPos)
+                    -- Bay tới bãi chờ quái spawn
                     InfoLabel.Text = "Lv: " .. currentLv .. " | Bay đến bãi: " .. qInfo.MobName
                     local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
                     local distToMobPos = (targetMobPos - hrp.Position).Magnitude
