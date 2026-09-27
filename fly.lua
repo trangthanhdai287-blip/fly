@@ -7,7 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM, AUTO CLICK & HITBOX
+-- CẤU HÌNH AUTO FARM & HITBOX
 -- ================================================================= --
 local CONFIG = {
     FarmOffset = Vector3.new(0, 30, 0),
@@ -127,7 +127,6 @@ local QUEST_DATABASE: {QuestData} = {
 
 local LocalPlayer = Players.LocalPlayer
 local IsFarming = false
-local IsAutoClicking = true -- Biến điều khiển trạng thái Auto Click độc lập
 local ActiveTween: Tween? = nil
 local NoclipConn: RBXScriptConnection? = nil
 local BodyVel: BodyVelocity? = nil
@@ -305,7 +304,7 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- HÀM AUTO CLICK / FAST ATTACK (ĐÃ TÁCH ĐỘC LẬP)
+-- HÀM FAST ATTACK NGẦM
 -- ================================================================= --
 local function ExecuteAutoClick()
     local char = LocalPlayer.Character
@@ -337,13 +336,10 @@ local function ExecuteAutoClick()
     end
 end
 
--- Vòng lặp Auto Click chạy riêng biệt (hoạt động khi IsAutoClicking = true)
 task.spawn(function()
     while true do
-        if IsAutoClicking then
-            ExecuteAutoClick()
-            ApplyPlayerHitbox()
-        end
+        ExecuteAutoClick()
+        ApplyPlayerHitbox()
         task.wait(CONFIG.AttackDelay)
     end
 end)
@@ -407,7 +403,7 @@ local function GetTargetEnemy(): Model?
 end
 
 -- ================================================================= --
--- GUI SETUP & GIAO DIỆN
+-- MODERN HUB UI SETUP (GIỐNG CÁC HUB NỔI TIẾNG)
 -- ================================================================= --
 local function GetGuiParent(): Instance
     local success, result = pcall(function() return game:GetService("CoreGui") end)
@@ -416,135 +412,326 @@ local function GetGuiParent(): Instance
 end
 
 local ParentGui = GetGuiParent()
-local OldGui = ParentGui:FindFirstChild("BloxFruitsFullHub")
+local OldGui = ParentGui:FindFirstChild("BloxFruitsModernHub")
 if OldGui then OldGui:Destroy() end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "BloxFruitsFullHub"
+ScreenGui.Name = "BloxFruitsModernHub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = ParentGui
 
+-- Main Frame
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 270, 0, 225) -- Tăng chiều cao để chứa thêm nút Auto Click
-MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+MainFrame.Size = UDim2.new(0, 480, 0, 310)
+MainFrame.Position = UDim2.new(0.5, -240, 0.5, -155)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 8)
+MainCorner.CornerRadius = UDim.new(0, 10)
 MainCorner.Parent = MainFrame
 
 local MainStroke = Instance.new("UIStroke")
-MainStroke.Color = Color3.fromRGB(0, 200, 255)
+MainStroke.Color = Color3.fromRGB(45, 45, 60)
 MainStroke.Thickness = 1.5
 MainStroke.Parent = MainFrame
 
+-- Topbar
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 40)
+TopBar.BackgroundColor3 = Color3.fromRGB(26, 26, 35)
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
+
+local TopBarCorner = Instance.new("UICorner")
+TopBarCorner.CornerRadius = UDim.new(0, 10)
+TopBarCorner.Parent = TopBar
+
+-- Sửa góc bo tròn dưới của TopBar cho phẳng
+local CoverCorner = Instance.new("Frame")
+CoverCorner.Size = UDim2.new(1, 0, 0, 10)
+CoverCorner.Position = UDim2.new(0, 0, 1, -10)
+CoverCorner.BackgroundColor3 = Color3.fromRGB(26, 26, 35)
+CoverCorner.BorderSizePixel = 0
+CoverCorner.Parent = TopBar
+
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -40, 0, 35)
-TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.Size = UDim2.new(0, 200, 1, 0)
+TitleLabel.Position = UDim2.new(0, 15, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM HUB"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.TextSize = 11
+TitleLabel.Text = "⚡ PREMIER HUB"
+TitleLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
+TitleLabel.TextSize = 13
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-TitleLabel.Parent = MainFrame
+TitleLabel.Parent = TopBar
 
-local MinimizeBtn = Instance.new("TextButton")
-MinimizeBtn.Size = UDim2.new(0, 26, 0, 26)
-MinimizeBtn.Position = UDim2.new(1, -32, 0, 5)
-MinimizeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-MinimizeBtn.Text = "-"
-MinimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinimizeBtn.TextSize = 14
-MinimizeBtn.Font = Enum.Font.GothamBold
-MinimizeBtn.Parent = MainFrame
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -35, 0.5, -14)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+CloseBtn.TextSize = 12
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = TopBar
 
-local MinBtnCorner = Instance.new("UICorner")
-MinBtnCorner.CornerRadius = UDim.new(0, 4)
-MinBtnCorner.Parent = MinimizeBtn
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
 
-local Container = Instance.new("Folder")
-Container.Name = "UIContainer"
-Container.Parent = MainFrame
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
 
-local FarmBtn = Instance.new("TextButton")
-FarmBtn.Size = UDim2.new(0.85, 0, 0, 35)
-FarmBtn.Position = UDim2.new(0.075, 0, 0, 40)
-FarmBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-FarmBtn.Text = "AUTO FARM: OFF"
-FarmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-FarmBtn.TextSize = 12
-FarmBtn.Font = Enum.Font.GothamBold
-FarmBtn.Parent = Container
+-- Tab Menu Left Bar
+local TabBar = Instance.new("ScrollingFrame")
+TabBar.Size = UDim2.new(0, 120, 1, -50)
+TabBar.Position = UDim2.new(0, 8, 0, 45)
+TabBar.BackgroundTransparency = 1
+TabBar.ScrollBarThickness = 0
+TabBar.CanvasSize = UDim2.new(0, 0, 0, 100)
+TabBar.Parent = MainFrame
 
-local FarmBtnCorner = Instance.new("UICorner")
-FarmBtnCorner.CornerRadius = UDim.new(0, 6)
-FarmBtnCorner.Parent = FarmBtn
+local TabListLayout = Instance.new("UIListLayout")
+TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TabListLayout.Padding = UDim.new(0, 6)
+TabListLayout.Parent = TabBar
 
--- Nút điều khiển Auto Click độc lập
-local ClickBtn = Instance.new("TextButton")
-ClickBtn.Size = UDim2.new(0.85, 0, 0, 35)
-ClickBtn.Position = UDim2.new(0.075, 0, 0, 80)
-ClickBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
-ClickBtn.Text = "AUTO CLICK: ON"
-ClickBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ClickBtn.TextSize = 12
-ClickBtn.Font = Enum.Font.GothamBold
-ClickBtn.Parent = Container
+-- Content Container Right Side
+local ContentContainer = Instance.new("Frame")
+ContentContainer.Size = UDim2.new(1, -140, 1, -50)
+ContentContainer.Position = UDim2.new(0, 135, 0, 45)
+ContentContainer.BackgroundTransparency = 1
+ContentContainer.Parent = MainFrame
 
-local ClickBtnCorner = Instance.new("UICorner")
-ClickBtnCorner.CornerRadius = UDim.new(0, 6)
-ClickBtnCorner.Parent = ClickBtn
-
-local HakiBtn = Instance.new("TextButton")
-HakiBtn.Size = UDim2.new(0.85, 0, 0, 35)
-HakiBtn.Position = UDim2.new(0.075, 0, 0, 120)
-HakiBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
-HakiBtn.Text = "AUTO HAKI: ON"
-HakiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-HakiBtn.TextSize = 12
-HakiBtn.Font = Enum.Font.GothamBold
-HakiBtn.Parent = Container
-
-local HakiBtnCorner = Instance.new("UICorner")
-HakiBtnCorner.CornerRadius = UDim.new(0, 6)
-HakiBtnCorner.Parent = HakiBtn
-
+-- Status Bar dưới cùng (Hiển thị Sea và Level)
 local InfoLabel = Instance.new("TextLabel")
-InfoLabel.Size = UDim2.new(1, -20, 0, 45)
-InfoLabel.Position = UDim2.new(0, 10, 0, 165)
+InfoLabel.Size = UDim2.new(1, -140, 0, 25)
+InfoLabel.Position = UDim2.new(0, 135, 1, -28)
 InfoLabel.BackgroundTransparency = 1
-InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel() .. " | Ready"
-InfoLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
+InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Level: " .. GetPlayerLevel()
+InfoLabel.TextColor3 = Color3.fromRGB(150, 150, 180)
 InfoLabel.TextSize = 11
 InfoLabel.Font = Enum.Font.GothamMedium
-InfoLabel.TextWrapped = true
-InfoLabel.Parent = Container
+InfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+InfoLabel.Parent = MainFrame
 
-local isMinimized = false
-MinimizeBtn.MouseButton1Click:Connect(function()
-    isMinimized = not isMinimized
-    if isMinimized then
-        MinimizeBtn.Text = "+"
-        MainFrame:TweenSize(UDim2.new(0, 270, 0, 35), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
-        for _, child in ipairs(Container:GetChildren()) do
-            if child:IsA("GuiObject") then child.Visible = false end
+-- Quản lý Tab
+local Tabs = {}
+local CurrentActiveTab = nil
+
+local function CreateTab(name: string)
+    local TabButton = Instance.new("TextButton")
+    TabButton.Size = UDim2.new(1, 0, 0, 32)
+    TabButton.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+    TabButton.Text = name
+    TabButton.TextColor3 = Color3.fromRGB(150, 150, 170)
+    TabButton.TextSize = 11
+    TabButton.Font = Enum.Font.GothamMedium
+    TabButton.Parent = TabBar
+
+    local BtnCorner = Instance.new("UICorner")
+    BtnCorner.CornerRadius = UDim.new(0, 6)
+    BtnCorner.Parent = TabButton
+
+    local TabContent = Instance.new("ScrollingFrame")
+    TabContent.Size = UDim2.new(1, 0, 1, -30)
+    TabContent.Position = UDim2.new(0, 0, 0, 0)
+    TabContent.BackgroundTransparency = 1
+    TabContent.Visible = false
+    TabContent.ScrollBarThickness = 3
+    TabContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TabContent.Parent = ContentContainer
+
+    local ContentLayout = Instance.new("UIListLayout")
+    ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ContentLayout.Padding = UDim.new(0, 8)
+    ContentLayout.Parent = TabContent
+
+    ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        TabContent.CanvasSize = UDim2.new(0, 0, 0, ContentLayout.AbsoluteContentSize.Y + 10)
+    end)
+
+    TabButton.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do
+            t.Button.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+            t.Button.TextColor3 = Color3.fromRGB(150, 150, 170)
+            t.Content.Visible = false
         end
+        TabButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+        TabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        TabContent.Visible = true
+    end)
+
+    table.insert(Tabs, {Button = TabButton, Content = TabContent})
+
+    if not CurrentActiveTab then
+        CurrentActiveTab = TabButton
+        TabButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+        TabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        TabContent.Visible = true
+    end
+
+    return TabContent
+end
+
+local function CreateToggle(parent: ScrollingFrame, title: string, defaultState: boolean, callback: (boolean) -> ())
+    local ToggleFrame = Instance.new("Frame")
+    ToggleFrame.Size = UDim2.new(1, -6, 0, 36)
+    ToggleFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+    ToggleFrame.Parent = parent
+
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 6)
+    Corner.Parent = ToggleFrame
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -55, 1, 0)
+    Label.Position = UDim2.new(0, 12, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = title
+    Label.TextColor3 = Color3.fromRGB(220, 220, 240)
+    Label.TextSize = 11
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = ToggleFrame
+
+    local ToggleSwitch = Instance.new("TextButton")
+    ToggleSwitch.Size = UDim2.new(0, 36, 0, 18)
+    ToggleSwitch.Position = UDim2.new(1, -45, 0.5, -9)
+    ToggleSwitch.BackgroundColor3 = defaultState and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(60, 60, 75)
+    ToggleSwitch.Text = ""
+    ToggleSwitch.Parent = ToggleFrame
+
+    local SwitchCorner = Instance.new("UICorner")
+    SwitchCorner.CornerRadius = UDim.new(1, 0)
+    SwitchCorner.Parent = ToggleSwitch
+
+    local Circle = Instance.new("Frame")
+    Circle.Size = UDim2.new(0, 14, 0, 14)
+    Circle.Position = defaultState and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+    Circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Circle.Parent = ToggleSwitch
+
+    local CircleCorner = Instance.new("UICorner")
+    CircleCorner.CornerRadius = UDim.new(1, 0)
+    CircleCorner.Parent = Circle
+
+    local state = defaultState
+    ToggleSwitch.MouseButton1Click:Connect(function()
+        state = not state
+        local targetColor = state and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(60, 60, 75)
+        local targetPos = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+
+        TweenService:Create(ToggleSwitch, TweenInfo.new(0.2), {BackgroundColor3 = targetColor}):Play()
+        TweenService:Create(Circle, TweenInfo.new(0.2), {Position = targetPos}):Play()
+
+        callback(state)
+    end)
+end
+
+-- Tạo các Tab giao diện
+local FarmTab = CreateTab("Farm")
+local SettingsTab = CreateTab("Settings")
+
+-- Thêm tính năng vào Tab Farm
+CreateToggle(FarmTab, "Auto Farm Level", false, function(state)
+    if state then
+        if IsFarming then return end
+        IsFarming = true
+        task.spawn(function()
+            while IsFarming do
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+                if hrp and hum and hum.Health > 0 then
+                    EnablePhysics(hrp)
+                    EnableHaki()
+
+                    local qInfo = GetCurrentQuestInfo()
+
+                    if CONFIG.AutoQuest and not HasActiveQuest() then
+                        TakeQuest()
+                    end
+
+                    local target = GetTargetEnemy()
+                    if target then
+                        local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart
+                        local targetHum = target:FindFirstChildOfClass("Humanoid")
+
+                        if targetHrp and targetHum and targetHum.Health > 0 then
+                            local targetPos = targetHrp.Position + CONFIG.FarmOffset
+                            local dist = (targetPos - hrp.Position).Magnitude
+                            local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
+
+                            if ActiveTween then ActiveTween:Cancel() end
+                            ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+                                CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
+                            })
+                            ActiveTween:Play()
+
+                            if dist > 10 then task.wait(tweenTime) end
+
+                            while IsFarming and targetHum.Health > 0 and target.Parent do
+                                hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
+                                task.wait(0.05)
+                            end
+                            task.wait(0.1)
+                        end
+                    else
+                        local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
+                        local distToMobPos = (targetMobPos - hrp.Position).Magnitude
+
+                        if distToMobPos > 15 then
+                            local tweenTime = math.max(0.1, distToMobPos / CONFIG.TweenSpeed)
+                            if ActiveTween then ActiveTween:Cancel() end
+                            ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+                                CFrame = CFrame.new(targetMobPos)
+                            })
+                            ActiveTween:Play()
+                            task.wait(tweenTime)
+                        end
+                    end
+                end
+                task.wait(0.1)
+            end
+        end)
     else
-        MinimizeBtn.Text = "-"
-        MainFrame:TweenSize(UDim2.new(0, 270, 0, 225), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
-        task.wait(0.1)
-        for _, child in ipairs(Container:GetChildren()) do
-            if child:IsA("GuiObject") then child.Visible = true end
-        end
+        IsFarming = false
+        if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
+        DisablePhysics()
     end
 end)
 
+CreateToggle(FarmTab, "Auto Quest", CONFIG.AutoQuest, function(state)
+    CONFIG.AutoQuest = state
+end)
+
+-- Thêm tính năng vào Tab Settings
+CreateToggle(SettingsTab, "Auto Haki", CONFIG.AutoHaki, function(state)
+    CONFIG.AutoHaki = state
+    if state then EnableHaki() end
+end)
+
+CreateToggle(SettingsTab, "Auto Equip Weapon", CONFIG.AutoEquip, function(state)
+    CONFIG.AutoEquip = state
+end)
+
+CreateToggle(SettingsTab, "No Attack Animation", CONFIG.NoAnimation, function(state)
+    CONFIG.NoAnimation = state
+end)
+
+CreateToggle(SettingsTab, "Auto Hitbox (60x60)", CONFIG.AutoHitbox, function(state)
+    CONFIG.AutoHitbox = state
+end)
+
+-- Kéo thả cửa sổ (Draggable)
 local dragging, dragStart, startPos
-MainFrame.InputBegan:Connect(function(input)
+TopBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
@@ -552,7 +739,7 @@ MainFrame.InputBegan:Connect(function(input)
     end
 end)
 
-MainFrame.InputEnded:Connect(function(input)
+TopBar.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
@@ -562,111 +749,5 @@ UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
         MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-
-local function StopFarm()
-    IsFarming = false
-    if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
-    DisablePhysics()
-    FarmBtn.Text = "AUTO FARM: OFF"
-    FarmBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-end
-
-local function StartFarm()
-    if IsFarming then return end
-    IsFarming = true
-    FarmBtn.Text = "AUTO FARM: ON"
-    FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
-
-    task.spawn(function()
-        while IsFarming do
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-
-            if hrp and hum and hum.Health > 0 then
-                EnablePhysics(hrp)
-                EnableHaki()
-
-                local qInfo = GetCurrentQuestInfo()
-
-                if CONFIG.AutoQuest and not HasActiveQuest() then
-                    InfoLabel.Text = "Đang đi nhận Quest..."
-                    TakeQuest()
-                end
-
-                local target = GetTargetEnemy()
-                if target then
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Farm: " .. qInfo.MobName
-                    local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart
-                    local targetHum = target:FindFirstChildOfClass("Humanoid")
-
-                    if targetHrp and targetHum and targetHum.Health > 0 then
-                        local targetPos = targetHrp.Position + CONFIG.FarmOffset
-                        local dist = (targetPos - hrp.Position).Magnitude
-                        local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
-
-                        if ActiveTween then ActiveTween:Cancel() end
-                        ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-                            CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
-                        })
-                        ActiveTween:Play()
-
-                        if dist > 10 then task.wait(tweenTime) end
-
-                        while IsFarming and targetHum.Health > 0 and target.Parent do
-                            hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
-                            task.wait(0.05)
-                        end
-                        task.wait(0.1)
-                    end
-                else
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tìm quái: " .. qInfo.MobName
-                    local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
-                    local distToMobPos = (targetMobPos - hrp.Position).Magnitude
-
-                    if distToMobPos > 15 then
-                        local tweenTime = math.max(0.1, distToMobPos / CONFIG.TweenSpeed)
-                        if ActiveTween then ActiveTween:Cancel() end
-                        ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-                            CFrame = CFrame.new(targetMobPos)
-                        })
-                        ActiveTween:Play()
-                        task.wait(tweenTime)
-                    end
-                end
-            end
-            task.wait(0.1)
-        end
-        StopFarm()
-    end)
-end
-
-FarmBtn.MouseButton1Click:Connect(function()
-    if IsFarming then StopFarm() else StartFarm() end
-end)
-
--- Sự kiện bật/tắt Auto Click trên UI
-ClickBtn.MouseButton1Click:Connect(function()
-    IsAutoClicking = not IsAutoClicking
-    if IsAutoClicking then
-        ClickBtn.Text = "AUTO CLICK: ON"
-        ClickBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
-    else
-        ClickBtn.Text = "AUTO CLICK: OFF"
-        ClickBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-    end
-end)
-
-HakiBtn.MouseButton1Click:Connect(function()
-    CONFIG.AutoHaki = not CONFIG.AutoHaki
-    if CONFIG.AutoHaki then
-        HakiBtn.Text = "AUTO HAKI: ON"
-        HakiBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
-        EnableHaki()
-    else
-        HakiBtn.Text = "AUTO HAKI: OFF"
-        HakiBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
     end
 end)
