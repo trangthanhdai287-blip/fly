@@ -4,13 +4,13 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser") -- Dùng VirtualUser để click không bị đơ chuột
+local VirtualUser = game:GetService("VirtualUser")
 
 -- ================================================================= --
 -- CẤU HÌNH AUTO FARM & HITBOX
 -- ================================================================= --
 local CONFIG = {
-    ToggleFarmKey = Enum.KeyCode.F, -- Phím bật/tắt Auto Farm
+    ToggleFarmKey = Enum.KeyCode.F,
 
     FarmOffset = Vector3.new(0, 30, 0),
     TweenSpeed = 95,
@@ -304,7 +304,7 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- AUTO CLICK VIRTUALUSER (GÂY DAMAGE 100% MÀ KHÔNG KHÓA CHUỘT THẬT)
+-- AUTO CLICK VIRTUALUSER (ĐÃ SỬA GÂY DAMAGE 100%)
 -- ================================================================= --
 local function ExecuteAutoClick()
     if not IsFarming then return end
@@ -313,21 +313,26 @@ local function ExecuteAutoClick()
 
     EnableHaki()
 
-    -- Tự động cầm vũ khí
-    if CONFIG.AutoEquip then
-        local tool = char:FindFirstChildOfClass("Tool")
-        if not tool then
-            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-            if backpack then
-                tool = backpack:FindFirstChildOfClass("Tool")
-                if tool then tool.Parent = char end
+    -- 1. Equip Tool
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool and CONFIG.AutoEquip then
+        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+        if backpack then
+            tool = backpack:FindFirstChildOfClass("Tool")
+            if tool then 
+                tool.Parent = char 
             end
         end
     end
 
-    -- Sử dụng VirtualUser bắn tín hiệu MouseClick trực tiếp vào Engine game
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton1(Vector2.new(500, 500))
+    -- 2. Đánh thật để kích hoạt Damage
+    if tool then
+        tool:Activate()
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new(0, 0))
+        task.wait(0.01)
+        VirtualUser:Button1Up(Vector2.new(0, 0))
+    end
 end
 
 -- VÒNG LẶP AUTO CLICK
@@ -441,7 +446,6 @@ TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.Parent = MainFrame
 
--- NÚT AUTO FARM
 local FarmBtn = Instance.new("TextButton")
 FarmBtn.Size = UDim2.new(0.85, 0, 0, 38)
 FarmBtn.Position = UDim2.new(0.075, 0, 0, 40)
@@ -456,7 +460,6 @@ local FarmBtnCorner = Instance.new("UICorner")
 FarmBtnCorner.CornerRadius = UDim.new(0, 6)
 FarmBtnCorner.Parent = FarmBtn
 
--- NÚT AUTO HAKI
 local HakiBtn = Instance.new("TextButton")
 HakiBtn.Size = UDim2.new(0.85, 0, 0, 38)
 HakiBtn.Position = UDim2.new(0.075, 0, 0, 86)
