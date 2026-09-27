@@ -4,15 +4,15 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM & HITBOX
+-- CẤU HÌNH AUTO FARM, AUTO CLICK & HITBOX
 -- ================================================================= --
 local CONFIG = {
-    ToggleFarmKey = Enum.KeyCode.F,
+    ToggleFarmKey = Enum.KeyCode.F, -- Phím bật/tắt Auto Farm
 
-    FarmOffset = Vector3.new(0, 30, 0), -- Đứng cao 30 studs
+    FarmOffset = Vector3.new(0, 30, 0),
     TweenSpeed = 95,
     AutoEquip = true,
     NoAnimation = true,
@@ -20,10 +20,10 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
 
-    -- Delay đánh (Chỉnh 0.05 - 0.1 để tránh bị Server kick)
-    AttackDelay = 0.08,
+    -- Tốc độ Auto Click
+    AttackDelay = 0.02,
 
-    -- Hitbox Quái
+    -- Cấu hình Hitbox
     AutoHitbox = true,
     HitboxSize = Vector3.new(60, 60, 60),
     HitboxTransparency = 0.8,
@@ -113,7 +113,7 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 3, MinLv = 1825,MaxLv = 1849,QuestName = "DeepForestIsland2Quest", QuestLevel = 1, MobName = "Forest Pirate",  NpcPos = Vector3.new(-13230, 332, -7625), MobPos = Vector3.new(-13420, 332, -7910) },
     { Sea = 3, MinLv = 1850,MaxLv = 1899,QuestName = "DeepForestIsland2Quest", QuestLevel = 2, MobName = "Mythological Pirate", NpcPos = Vector3.new(-13230, 332, -7625), MobPos = Vector3.new(-13520, 332, -6910) },
     { Sea = 3, MinLv = 1900,MaxLv = 1924,QuestName = "HauntedQuest1",  QuestLevel = 1, MobName = "Reborn Skeleton",    NpcPos = Vector3.new(-9480, 142, 5520),  MobPos = Vector3.new(-8810, 142, 6030) },
-    { Sea = 3, MinLv = 1925,MaxLv = 1974,QuestName = "HauntedQuest1",  QuestLevel = 2, MobName = "Living Zombie",      NpcPos = Vector3.new(-9480, 142, 5520),  MobPos = Vector3.new(-10110, 142, 5810) },
+    { Sea = 3, MinLv = 1925,MaxLv = 1974,QuestName = "HauntedQuest1",  QuestLevel = 2, MobName = "Living Zombie",      NpcPos =Vector3.new(-9480, 142, 5520),  MobPos = Vector3.new(-10110, 142, 5810) },
     { Sea = 3, MinLv = 1975,MaxLv = 1999,QuestName = "HauntedQuest2",  QuestLevel = 1, MobName = "Demonic Soul",       NpcPos = Vector3.new(-9515, 172, 6070),  MobPos = Vector3.new(-9510, 172, 6720) },
     { Sea = 3, MinLv = 2000,MaxLv = 2049,QuestName = "HauntedQuest2",  QuestLevel = 2, MobName = "Posessed Mummy",     NpcPos = Vector3.new(-9515, 172, 6070),  MobPos = Vector3.new(-9580, 10, 6180) },
     { Sea = 3, MinLv = 2050,MaxLv = 2074,QuestName = "PeanutQuest",    QuestLevel = 1, MobName = "Peanut Scout",       NpcPos = Vector3.new(-2105, 38, -10190),MobPos = Vector3.new(-2120, 38, -10410) },
@@ -137,6 +137,7 @@ local NoclipConn: RBXScriptConnection? = nil
 local BodyVel: BodyVelocity? = nil
 local LastQuestAttempt = 0
 
+local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
 local function EnableHaki()
@@ -221,7 +222,7 @@ local function TakeQuest(): boolean
 
         local checkInterval = 0.1
         for _ = 1, math.floor(tweenTime / checkInterval) do
-            if HasActiveQuest() then
+            if HasActiveQuest() or not IsFarming then
                 if ActiveTween then ActiveTween:Cancel() end
                 return true
             end
@@ -231,19 +232,13 @@ local function TakeQuest(): boolean
 
     if HasActiveQuest() then return true end
 
-    local startWait = os.clock()
-    while os.clock() - startWait < 0.2 do
-        hrp.CFrame = targetNpcCFrame
-        task.wait(0.05)
-    end
-
     if CommF then
         pcall(function()
             CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
         end)
     end
 
-    task.wait(0.5)
+    task.wait(0.3)
     return HasActiveQuest()
 end
 
@@ -255,6 +250,27 @@ local function ApplyHitbox(enemy: Model)
                 part.Size = CONFIG.HitboxSize
                 part.Transparency = CONFIG.HitboxTransparency
                 part.CanCollide = false
+            end
+        end
+    end
+end
+
+local function ApplyPlayerHitbox()
+    if not CONFIG.AutoHitbox then return end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+            local head = player.Character:FindFirstChild("Head") :: BasePart?
+
+            if hrp then
+                hrp.Size = CONFIG.HitboxSize
+                hrp.Transparency = CONFIG.HitboxTransparency
+                hrp.CanCollide = false
+            end
+            if head then
+                head.Size = CONFIG.HitboxSize
+                head.Transparency = CONFIG.HitboxTransparency
+                head.CanCollide = false
             end
         end
     end
@@ -283,65 +299,42 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- HÀM AUTO ATTACK TỔNG HỢP (KÍCH HOẠT REMOTE DAMAGE CỦA BLOX FRUITS)
+-- AUTO CLICK / FAST ATTACK
 -- ================================================================= --
-local function TriggerDamage()
+local function ExecuteAutoClick()
     local char = LocalPlayer.Character
     if not char then return end
 
     EnableHaki()
 
-    -- 1. Tự động lấy và Trang bị Vũ khí
-    local tool = char:FindFirstChildOfClass("Tool")
-    if not tool and CONFIG.AutoEquip then
-        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-        if backpack then
-            tool = backpack:FindFirstChildOfClass("Tool")
-            if tool then 
-                tool.Parent = char 
+    if CONFIG.AutoEquip then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool then
+            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+            if backpack then
+                tool = backpack:FindFirstChildOfClass("Tool")
+                if tool then tool.Parent = char end
             end
         end
     end
 
-    if tool then
-        -- Kích hoạt Tool phía Client
-        tool:Activate()
+    local currentTool = char:FindFirstChildOfClass("Tool")
+    if currentTool then
+        currentTool:Activate()
+    end
 
-        -- 2. Bắn RemoteEvent đòn đánh trực tiếp (Bypass Server Check)
-        local netFolder = ReplicatedStorage:FindFirstChild("Net") or ReplicatedStorage
-        local registerAttack = netFolder:FindFirstChild("RegisterAttack") 
-            or netFolder:FindFirstChild("RE/RegisterAttack") 
-            or ReplicatedStorage:FindFirstChild("RigControllerEvent")
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 
-        if registerAttack and registerAttack:IsA("RemoteEvent") then
-            pcall(function()
-                registerAttack:FireServer(0.1)
-            end)
-        end
-
-        -- 3. Gọi RemoteEvent trong chính Tool (đối với Melee / Blox Fruit / Sword)
-        for _, obj in ipairs(tool:GetChildren()) do
-            if obj:IsA("RemoteEvent") then
-                pcall(function()
-                    obj:FireServer()
-                end)
-            end
-        end
-
-        -- 4. Giả lập Click Chuột bằng VirtualUser
-        VirtualUser:CaptureController()
-        VirtualUser:Button1Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
-        task.wait(0.01)
-        VirtualUser:Button1Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    if RegisterAttack then
+        pcall(function() RegisterAttack:FireServer(0) end)
     end
 end
 
--- Loop Auto Attack
 task.spawn(function()
     while true do
-        if IsFarming then
-            TriggerDamage()
-        end
+        ExecuteAutoClick()
+        ApplyPlayerHitbox()
         task.wait(CONFIG.AttackDelay)
     end
 end)
@@ -446,6 +439,7 @@ TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.Parent = MainFrame
 
+-- NÚT AUTO FARM
 local FarmBtn = Instance.new("TextButton")
 FarmBtn.Size = UDim2.new(0.85, 0, 0, 38)
 FarmBtn.Position = UDim2.new(0.075, 0, 0, 40)
@@ -460,6 +454,7 @@ local FarmBtnCorner = Instance.new("UICorner")
 FarmBtnCorner.CornerRadius = UDim.new(0, 6)
 FarmBtnCorner.Parent = FarmBtn
 
+-- NÚT AUTO HAKI
 local HakiBtn = Instance.new("TextButton")
 HakiBtn.Size = UDim2.new(0.85, 0, 0, 38)
 HakiBtn.Position = UDim2.new(0.075, 0, 0, 86)
@@ -513,7 +508,6 @@ local function StopFarm()
     DisablePhysics()
     FarmBtn.Text = "AUTO FARM: OFF (F)"
     FarmBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-    InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel() .. " | Idle"
 end
 
 local function StartFarm()
@@ -555,13 +549,18 @@ local function StartFarm()
                         })
                         ActiveTween:Play()
 
-                        if dist > 10 then task.wait(tweenTime) end
+                        if dist > 10 then
+                            local elapsed = 0
+                            while IsFarming and elapsed < tweenTime and targetHum.Health > 0 and target.Parent do
+                                elapsed += 0.05
+                                task.wait(0.05)
+                            end
+                        end
 
                         while IsFarming and targetHum.Health > 0 and target.Parent do
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
                             task.wait(0.05)
                         end
-                        task.wait(0.1)
                     end
                 else
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tìm quái: " .. qInfo.MobName
@@ -578,8 +577,10 @@ local function StartFarm()
                         task.wait(tweenTime)
                     end
                 end
+            else
+                task.wait(0.5)
             end
-            task.wait(0.1)
+            task.wait(0.05)
         end
         StopFarm()
     end)
