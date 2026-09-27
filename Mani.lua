@@ -7,7 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM (FIXED SEA & QUEST DETECTION)
+-- CẤU HÌNH AUTO FARM (FIXED QUEST TAKING)
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
@@ -39,17 +39,17 @@ type QuestData = {
 local function GetCurrentSea(): number
     local placeId = game.PlaceId
     if placeId == 2753915549 then
-        return 1 -- Sea 1 (First Sea)
+        return 1
     elseif placeId == 4442272183 then
-        return 2 -- Sea 2 (Second Sea)
+        return 2
     elseif placeId == 7449423635 then
-        return 3 -- Sea 3 (Third Sea)
+        return 3
     end
-    return 1 -- Mặc định nếu không nhận diện được
+    return 1
 end
 
 local QUEST_DATABASE: {QuestData} = {
-    -- ==================== SEA 1 ====================
+    -- SEA 1
     { Sea = 1, MinLv = 1,   MaxLv = 9,   QuestName = "BanditQuest1",  QuestLevel = 1, MobName = "Bandit",               NpcPos = Vector3.new(1059, 16, 1549),   MobPos = Vector3.new(1145, 17, 1634) },
     { Sea = 1, MinLv = 10,  MaxLv = 14,  QuestName = "JungleQuest",   QuestLevel = 1, MobName = "Monkey",               NpcPos = Vector3.new(-1598, 37, 153),   MobPos = Vector3.new(-1448, 50, 63) },
     { Sea = 1, MinLv = 15,  MaxLv = 29,  QuestName = "JungleQuest",   QuestLevel = 2, MobName = "Gorilla",              NpcPos = Vector3.new(-1598, 37, 153),   MobPos = Vector3.new(-1237, 6, -486) },
@@ -75,7 +75,7 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 1, MinLv = 625, MaxLv = 649, QuestName = "FountainQuest", QuestLevel = 1, MobName = "Galley Pirate",        NpcPos = Vector3.new(5258, 38, 4050),    MobPos = Vector3.new(5585, 38, 3990) },
     { Sea = 1, MinLv = 650, MaxLv = 700, QuestName = "FountainQuest", QuestLevel = 2, MobName = "Galley Captain",       NpcPos = Vector3.new(5258, 38, 4050),    MobPos = Vector3.new(5645, 38, 4950) },
 
-    -- ==================== SEA 2 ====================
+    -- SEA 2
     { Sea = 2, MinLv = 700, MaxLv = 724, QuestName = "Area1Quest",    QuestLevel = 1, MobName = "Raider",               NpcPos = Vector3.new(-425, 73, 1836),   MobPos = Vector3.new(-740, 73, 2380) },
     { Sea = 2, MinLv = 725, MaxLv = 774, QuestName = "Area1Quest",    QuestLevel = 2, MobName = "Mercenary",            NpcPos = Vector3.new(-425, 73, 1836),   MobPos = Vector3.new(-960, 73, 1420) },
     { Sea = 2, MinLv = 775, MaxLv = 799, QuestName = "Area2Quest",    QuestLevel = 1, MobName = "Swan Pirate",          NpcPos = Vector3.new(637, 73, 918),     MobPos = Vector3.new(880, 120, 1210) },
@@ -99,7 +99,7 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 2, MinLv = 1425,MaxLv = 1474,QuestName = "ForgottenQuest",QuestLevel = 1, MobName = "Sea Soldier",          NpcPos = Vector3.new(-3054, 235, -10142),MobPos = Vector3.new(-3050, 235, -9780) },
     { Sea = 2, MinLv = 1475,MaxLv = 1500,QuestName = "ForgottenQuest",QuestLevel = 2, MobName = "Water Fighter",       NpcPos = Vector3.new(-3054, 235, -10142),MobPos = Vector3.new(-3380, 235, -10580) },
 
-    -- ==================== SEA 3 ====================
+    -- SEA 3
     { Sea = 3, MinLv = 1500,MaxLv = 1524,QuestName = "PiratePortQuest",QuestLevel = 1, MobName = "Pirate Millionaire",  NpcPos = Vector3.new(-290, 44, 5580),   MobPos = Vector3.new(-370, 75, 5550) },
     { Sea = 3, MinLv = 1525,MaxLv = 1574,QuestName = "PiratePortQuest",QuestLevel = 2, MobName = "Pistol Billionaire", NpcPos = Vector3.new(-290, 44, 5580),   MobPos = Vector3.new(-460, 75, 5920) },
     { Sea = 3, MinLv = 1575,MaxLv = 1599,QuestName = "AmazonQuest",    QuestLevel = 1, MobName = "Dragon Crew Warrior",NpcPos = Vector3.new(5832, 52, -1105), MobPos = Vector3.new(6350, 52, -1210) },
@@ -136,7 +136,6 @@ local AutoQuestEnabled = CONFIG.AutoQuest
 local ActiveTween: Tween? = nil
 local NoclipConn: RBXScriptConnection? = nil
 local BodyVel: BodyVelocity? = nil
-local LastQuestAttempt = 0
 
 local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
@@ -160,7 +159,6 @@ local function GetPlayerLevel(): number
     return 1
 end
 
--- TÌM QUEST KHỚP VỚI LEVEL VÀ SEA
 local function GetCurrentQuestInfo(): QuestData
     local myLevel = GetPlayerLevel()
     local currentSea = GetCurrentSea()
@@ -183,7 +181,7 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[1]
 end
 
--- KIỂM TRA CHÍNH XÁC QUEST (ĐÃ LỌC BỎ THANH EXP)
+-- KIỂM TRA CHÍNH XÁC QUEST ĐANG HOẠT ĐỘNG
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
@@ -192,57 +190,58 @@ local function HasActiveQuest(): boolean
     if not mainGui then return false end
 
     local questFrame = mainGui:FindFirstChild("Quest")
-    if questFrame then
-        if questFrame.Visible then return true end
-        local container = questFrame:FindFirstChild("Container")
-        if container and container.Visible then return true end
-    end
-
-    for _, v in ipairs(mainGui:GetDescendants()) do
-        if v:IsA("TextLabel") and v.Visible and v.Name ~= "Exp" then
-            local current, total = string.match(v.Text, "(%d+)/(%d+)")
-            if current and total then
-                local numTotal = tonumber(total)
-                if numTotal and numTotal <= 15 then
-                    return true
-                end
-            end
-        end
+    if questFrame and questFrame.Visible then
+        return true
     end
 
     return false
 end
 
-local function TakeQuest()
-    if not AutoQuestEnabled or HasActiveQuest() then return end
-    
-    if os.clock() - LastQuestAttempt < 3 then return end
-    LastQuestAttempt = os.clock()
+-- HÀM NHẬN QUEST ĐÃ FIX TRIỆT ĐỂ
+local function TakeQuest(): boolean
+    if not AutoQuestEnabled or HasActiveQuest() then return true end
 
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-    if not hrp then return end
+    if not hrp then return false end
 
     local qInfo = GetCurrentQuestInfo()
+    local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
 
+    -- 1. Bay sát tới NPC
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
-    if distToNpc > 12 then
+    if distToNpc > 10 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
         if ActiveTween then ActiveTween:Cancel() end
         
         ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-            CFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 2, 0))
+            CFrame = targetNpcCFrame
         })
         ActiveTween:Play()
         task.wait(tweenTime)
     end
 
-    if CommF then
-        pcall(function()
-            CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
-        end)
+    -- 2. Giữ chân nhân vật tại vị trí NPC 0.4s để Server đồng bộ vị trí
+    local startWait = os.clock()
+    while os.clock() - startWait < 0.4 do
+        hrp.CFrame = targetNpcCFrame
+        task.wait(0.05)
     end
-    task.wait(0.5)
+
+    -- 3. Gọi RemoteFunction nhận Quest (Thử lại tối đa 3 lần)
+    for retry = 1, 3 do
+        if HasActiveQuest() then return true end
+
+        if CommF then
+            pcall(function()
+                CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
+            end)
+        end
+
+        task.wait(0.3)
+    end
+
+    return HasActiveQuest()
 end
 
 local function ApplyHitbox(enemy: Model)
@@ -402,7 +401,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (SEA " .. GetCurrentSea() .. ")"
+TitleLabel.Text = "⚡ AUTO FARM (FIXED QUEST)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
@@ -526,13 +525,13 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Kiểm tra và nhận quest
+                -- 1. Ưu tiên nhận Quest trước
                 if AutoQuestEnabled and not HasActiveQuest() then
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Bay nhận Quest..."
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
                     TakeQuest()
                 end
 
-                -- 2. Đánh quái
+                -- 2. Đánh quái khi đã có Quest (hoặc tắt AutoQuest)
                 local target = GetTargetEnemy()
 
                 if target then
