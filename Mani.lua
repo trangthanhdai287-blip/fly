@@ -7,14 +7,12 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM
+-- CẤU HÌNH AUTO FARM, AUTO CLICK & HITBOX
 -- ================================================================= --
 local CONFIG = {
-    ToggleKey = Enum.KeyCode.F,
+    ToggleFarmKey = Enum.KeyCode.F, -- Phím bật/tắt Auto Farm
 
-    -- Bay cao 30 studs trên đầu quái
     FarmOffset = Vector3.new(0, 30, 0),
-
     TweenSpeed = 95,
     AutoEquip = true,
     NoAnimation = true,
@@ -22,10 +20,13 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
 
-    -- Cấu hình Hitbox
+    -- Tốc độ Auto Click (0.01 = Fast Attack siêu tốc, luôn tự chạy)
+    AttackDelay = 0.01,
+
+    -- Cấu hình Hitbox (Áp dụng cho cả Mob & Player)
     AutoHitbox = true,
     HitboxSize = Vector3.new(60, 60, 60),
-    HitboxTransparency = 1,
+    HitboxTransparency = 0.8,
 }
 
 type QuestData = {
@@ -41,15 +42,9 @@ type QuestData = {
 
 local function GetCurrentSea(): number
     local placeId = game.PlaceId
-
-    if placeId == 2753915549 then
-        return 1
-    elseif placeId == 4442272183 then
-        return 2
-    elseif placeId == 7449423635 then
-        return 3
-    end
-
+    if placeId == 2753915549 then return 1
+    elseif placeId == 4442272183 then return 2
+    elseif placeId == 7449423635 then return 3 end
     return 1
 end
 
@@ -149,9 +144,7 @@ local function EnableHaki()
     if not CONFIG.AutoHaki then return end
     local char = LocalPlayer.Character
     if char and not char:FindFirstChild("HasBuso") then
-        if CommF then
-            pcall(function() CommF:InvokeServer("Buso") end)
-        end
+        if CommF then pcall(function() CommF:InvokeServer("Buso") end) end
     end
 end
 
@@ -198,12 +191,8 @@ local function HasActiveQuest(): boolean
             local progressLabel = frame:FindFirstChild("progress", true) :: TextLabel?
             local headerLabel = frame:FindFirstChild("header", true) :: TextLabel?
 
-            if progressLabel and progressLabel.Text ~= "" and progressLabel.Text ~= "0" then
-                return true
-            end
-            if headerLabel and headerLabel.Text ~= "" then
-                return true
-            end
+            if progressLabel and progressLabel.Text ~= "" and progressLabel.Text ~= "0" then return true end
+            if headerLabel and headerLabel.Text ~= "" then return true end
         end
     end
     return false
@@ -265,8 +254,29 @@ local function ApplyHitbox(enemy: Model)
         if part:IsA("BasePart") then
             if part.Name == "HumanoidRootPart" or part.Name == "Head" then
                 part.Size = CONFIG.HitboxSize
-                part.Transparency = 1
+                part.Transparency = CONFIG.HitboxTransparency
                 part.CanCollide = false
+            end
+        end
+    end
+end
+
+local function ApplyPlayerHitbox()
+    if not CONFIG.AutoHitbox then return end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+            local head = player.Character:FindFirstChild("Head") :: BasePart?
+
+            if hrp then
+                hrp.Size = CONFIG.HitboxSize
+                hrp.Transparency = CONFIG.HitboxTransparency
+                hrp.CanCollide = false
+            end
+            if head then
+                head.Size = CONFIG.HitboxSize
+                head.Transparency = CONFIG.HitboxTransparency
+                head.CanCollide = false
             end
         end
     end
@@ -280,7 +290,7 @@ local function HookNoAnim(char: Model)
     if not animator then return end
 
     animator.AnimationPlayed:Connect(function(track)
-        if CONFIG.NoAnimation and IsFarming then
+        if CONFIG.NoAnimation then
             if track.AnimationPriority == Enum.AnimationPriority.Action
                 or track.AnimationPriority == Enum.AnimationPriority.Action2
                 or track.AnimationPriority == Enum.AnimationPriority.Action3
@@ -294,7 +304,10 @@ end
 if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
-local function ExecuteAttack()
+-- ================================================================= --
+-- HÀM AUTO CLICK / FAST ATTACK TỰ ĐỘNG LỰA CHỌN VÀ ĐÁNH NGẦM
+-- ================================================================= --
+local function ExecuteAutoClick()
     local char = LocalPlayer.Character
     if not char then return end
 
@@ -312,7 +325,9 @@ local function ExecuteAttack()
     end
 
     local currentTool = char:FindFirstChildOfClass("Tool")
-    if currentTool then currentTool:Activate() end
+    if currentTool then
+        currentTool:Activate()
+    end
 
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
@@ -321,6 +336,15 @@ local function ExecuteAttack()
         pcall(function() RegisterAttack:FireServer(0) end)
     end
 end
+
+-- VÒNG LẶP AUTO CLICK TỰ CHẠY LIÊN TỤC NGẦM (24/7)
+task.spawn(function()
+    while true do
+        ExecuteAutoClick()
+        ApplyPlayerHitbox()
+        task.wait(CONFIG.AttackDelay)
+    end
+end)
 
 local function EnablePhysics(hrp: BasePart)
     if not BodyVel or BodyVel.Parent ~= hrp then
@@ -396,7 +420,6 @@ ScreenGui.Name = "BloxFruitsFullHub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = ParentGui
 
--- Đã chỉnh lại kích thước GUI gọn hơn
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 270, 0, 185)
 MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
@@ -417,12 +440,13 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (HIGH 30)"
+TitleLabel.Text = "⚡ AUTO FARM HUB"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.Parent = MainFrame
 
+-- NÚT AUTO FARM
 local FarmBtn = Instance.new("TextButton")
 FarmBtn.Size = UDim2.new(0.85, 0, 0, 38)
 FarmBtn.Position = UDim2.new(0.075, 0, 0, 40)
@@ -437,6 +461,7 @@ local FarmBtnCorner = Instance.new("UICorner")
 FarmBtnCorner.CornerRadius = UDim.new(0, 6)
 FarmBtnCorner.Parent = FarmBtn
 
+-- NÚT AUTO HAKI
 local HakiBtn = Instance.new("TextButton")
 HakiBtn.Size = UDim2.new(0.85, 0, 0, 38)
 HakiBtn.Position = UDim2.new(0.075, 0, 0, 86)
@@ -498,6 +523,7 @@ local function StartFarm()
     FarmBtn.Text = "AUTO FARM: ON (F)"
     FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
 
+    -- VÒNG LẶP DI CHUYỂN BẰNG TWEEN & NHẬN QUEST
     task.spawn(function()
         while IsFarming do
             local char = LocalPlayer.Character
@@ -506,7 +532,6 @@ local function StartFarm()
 
             if hrp and hum and hum.Health > 0 then
                 EnablePhysics(hrp)
-                EnableHaki()
 
                 local qInfo = GetCurrentQuestInfo()
 
@@ -517,7 +542,7 @@ local function StartFarm()
 
                 local target = GetTargetEnemy()
                 if target then
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Farm: " .. qInfo.MobName .. " | Height: 30"
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Farm: " .. qInfo.MobName
                     local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart
                     local targetHum = target:FindFirstChildOfClass("Humanoid")
 
@@ -536,8 +561,7 @@ local function StartFarm()
 
                         while IsFarming and targetHum.Health > 0 and target.Parent do
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
-                            ExecuteAttack()
-                            task.wait(0.12)
+                            task.wait(0.05)
                         end
                         task.wait(0.1)
                     end
@@ -557,7 +581,7 @@ local function StartFarm()
                     end
                 end
             end
-            task.wait(0.15)
+            task.wait(0.1)
         end
         StopFarm()
     end)
@@ -582,7 +606,7 @@ HakiBtn.MouseButton1Click:Connect(function()
 end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == CONFIG.ToggleKey then
+    if not processed and input.KeyCode == CONFIG.ToggleFarmKey then
         ToggleFarm()
     end
 end)
