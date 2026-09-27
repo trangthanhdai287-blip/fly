@@ -4,15 +4,15 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM (FIXED REPEATED QUEST ISSUE)
+-- CẤU HÌNH AUTO FARM (FIXED ALL BUGS)
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
-    FarmOffset = Vector3.new(0, 10, 0),     -- Độ cao đứng trên đầu quái
-    TweenSpeed = 95,                        -- Tốc độ bay
+    FarmOffset = Vector3.new(0, 9, 0),      -- Độ cao đứng trên đầu quái
+    TweenSpeed = 100,                       -- Tốc độ bay
     AutoEquip = true,                       -- Tự lấy vũ khí
     NoAnimation = true,                     -- Bỏ Animation đánh
     AutoQuest = true,                       -- Tự động nhận Quest
@@ -20,7 +20,7 @@ local CONFIG = {
 
     -- Cấu hình Hitbox
     AutoHitbox = true,                      
-    HitboxSize = Vector3.new(25, 25, 25),   
+    HitboxSize = Vector3.new(20, 20, 20),   
     HitboxTransparency = 0.7,               
 }
 
@@ -127,7 +127,7 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 3, MinLv = 2325,MaxLv = 2374,QuestName = "ChocolatierQuest",QuestLevel = 1, MobName = "Cocoa Warrior",     NpcPos = Vector3.new(220, 24, -12100),  MobPos = Vector3.new(210, 24, -12410) },
     { Sea = 3, MinLv = 2375,MaxLv = 2399,QuestName = "ChocolatierQuest",QuestLevel = 2, MobName = "Chocolate Bar Battler",NpcPos = Vector3.new(220, 24, -12100),MobPos = Vector3.new(580, 24, -12410) },
     { Sea = 3, MinLv = 2400,MaxLv = 2449,QuestName = "CandyQuest",     QuestLevel = 1, MobName = "Sweet Thief",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1150, 15, -14550) },
-    { Sea = 3, MinLv = 2450,MaxLv = 2550,QuestName = "CandyQuest",     QuestLevel = 2, MobName = "Candy Rebel",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1420, 15, -14550) },
+    { Sea = 3, MinLv = 2450,MaxLv = 2600,QuestName = "CandyQuest",     QuestLevel = 2, MobName = "Candy Rebel",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1420, 15, -14550) },
 }
 
 local LocalPlayer = Players.LocalPlayer
@@ -181,7 +181,7 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[1]
 end
 
--- KIỂM TRA QUEST ỔN ĐỊNH (CHỐNG CHỚP UI KHI QUÁI CHẾT)
+-- KIỂM TRA QUEST NHANH CHÍNH XÁC
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
@@ -190,20 +190,10 @@ local function HasActiveQuest(): boolean
     if not mainGui then return false end
 
     local questFrame = mainGui:FindFirstChild("Quest")
-    if questFrame and questFrame.Visible then
-        return true
-    end
-
-    -- Thử kiểm tra lại sau 0.25s để tránh trường hợp UI đang chớp refresh
-    task.wait(0.25)
-    if questFrame and questFrame.Visible then
-        return true
-    end
-
-    return false
+    return questFrame and questFrame.Visible == true
 end
 
--- HÀM NHẬN QUEST CHẮC CHẮN
+-- HÀM NHẬN QUEST TỐI ƯU
 local function TakeQuest(): boolean
     if not AutoQuestEnabled or HasActiveQuest() then return true end
 
@@ -214,9 +204,9 @@ local function TakeQuest(): boolean
     local qInfo = GetCurrentQuestInfo()
     local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
 
-    -- 1. Bay đến NPC
+    -- Bay đến NPC
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
-    if distToNpc > 10 then
+    if distToNpc > 15 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
         if ActiveTween then ActiveTween:Cancel() end
         
@@ -227,39 +217,29 @@ local function TakeQuest(): boolean
         task.wait(tweenTime)
     end
 
-    -- 2. Giữ chân nhân vật 0.4s để Server xác nhận đứng cạnh NPC
-    local startWait = os.clock()
-    while os.clock() - startWait < 0.4 do
-        hrp.CFrame = targetNpcCFrame
-        task.wait(0.05)
+    -- Giữ chân nhân vật 0.2s để NPC nhận diện
+    hrp.CFrame = targetNpcCFrame
+    task.wait(0.2)
+
+    -- Gọi Remote nhận Quest
+    if CommF then
+        pcall(function()
+            CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
+        end)
     end
 
-    -- 3. Gọi RemoteFunction nhận Quest
-    for retry = 1, 3 do
-        if HasActiveQuest() then return true end
-
-        if CommF then
-            pcall(function()
-                CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
-            end)
-        end
-
-        task.wait(0.3)
-    end
-
+    task.wait(0.2)
     return HasActiveQuest()
 end
 
+-- SỬA LỖI HITBOX (GIỮ CANCOLLIDE TRÁNH QUÁI RƠI XUYÊN ĐẤT)
 local function ApplyHitbox(enemy: Model)
     if not CONFIG.AutoHitbox then return end
-    for _, part in ipairs(enemy:GetDescendants()) do
-        if part:IsA("BasePart") then
-            if part.Name == "HumanoidRootPart" or part.Name == "Head" then
-                part.Size = CONFIG.HitboxSize
-                part.Transparency = CONFIG.HitboxTransparency
-                part.CanCollide = false
-            end
-        end
+    local hrp = enemy:FindFirstChild("HumanoidRootPart") :: BasePart?
+    if hrp then
+        hrp.Size = CONFIG.HitboxSize
+        hrp.Transparency = CONFIG.HitboxTransparency
+        hrp.CanCollide = true -- Bắt buộc là true để quái không bị lọt map
     end
 end
 
@@ -284,6 +264,7 @@ end
 if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
+-- THAY THẾ BẰNG VIRTUALUSER CHẠY TỐT TRÊN CẢ PC VÀ MOBILE
 local function ExecuteAttack()
     local char = LocalPlayer.Character
     if not char then return end
@@ -304,8 +285,8 @@ local function ExecuteAttack()
     local currentTool = char:FindFirstChildOfClass("Tool")
     if currentTool then currentTool:Activate() end
 
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    VirtualUser:CaptureController()
+    VirtualUser:Button1Down(Vector2.new(0, 0))
 
     if RegisterAttack then
         pcall(function() RegisterAttack:FireServer(0) end)
@@ -407,9 +388,9 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (STABLE QUEST)"
+TitleLabel.Text = "⚡ AUTO FARM (FIXED)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.TextSize = 11
+TitleLabel.TextSize = 12
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.Parent = MainFrame
 
@@ -531,13 +512,13 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Chỉ nhận Quest khi CHẮC CHẮN không có Quest
+                -- 1. Tự động nhận Quest
                 if AutoQuestEnabled and not HasActiveQuest() then
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
                     TakeQuest()
                 end
 
-                -- 2. Đánh quái
+                -- 2. Tấn công quái
                 local target = GetTargetEnemy()
 
                 if target then
@@ -548,24 +529,23 @@ local function StartFarm()
                     if targetHrp and targetHum and targetHum.Health > 0 then
                         local targetPos = targetHrp.Position + CONFIG.FarmOffset
                         local dist = (targetPos - hrp.Position).Magnitude
-                        local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
 
-                        if ActiveTween then ActiveTween:Cancel() end
-                        ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-                            CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
-                        })
-                        ActiveTween:Play()
-
-                        if dist > 10 then task.wait(tweenTime) end
-
-                        while IsFarming and targetHum.Health > 0 and target.Parent do
-                            hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
-                            ExecuteAttack()
-                            task.wait(0.12)
+                        if dist > 15 then
+                            local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
+                            if ActiveTween then ActiveTween:Cancel() end
+                            ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+                                CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
+                            })
+                            ActiveTween:Play()
+                            task.wait(tweenTime)
+                        else
+                            hrp.CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
                         end
+
+                        ExecuteAttack()
                     end
                 else
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tim quai: " .. qInfo.MobName
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tìm quái: " .. qInfo.MobName
                     local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
                     local distToMobPos = (targetMobPos - hrp.Position).Magnitude
 
@@ -580,7 +560,7 @@ local function StartFarm()
                     end
                 end
             end
-            task.wait(0.2)
+            task.wait(0.05)
         end
         StopFarm()
     end)
