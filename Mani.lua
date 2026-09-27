@@ -7,7 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM (FIXED ALL BUGS)
+-- CẤU HÌNH AUTO FARM (FIXED QUEST FLICKER)
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
@@ -35,16 +35,11 @@ type QuestData = {
     MobPos: Vector3
 }
 
--- NHẬN DIỆN SEA QUA PLACEID
 local function GetCurrentSea(): number
     local placeId = game.PlaceId
-    if placeId == 2753915549 then
-        return 1
-    elseif placeId == 4442272183 then
-        return 2
-    elseif placeId == 7449423635 then
-        return 3
-    end
+    if placeId == 2753915549 then return 1
+    elseif placeId == 4442272183 then return 2
+    elseif placeId == 7449423635 then return 3 end
     return 1
 end
 
@@ -181,8 +176,8 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[1]
 end
 
--- KIỂM TRA QUEST NHANH CHÍNH XÁC
-local function HasActiveQuest(): boolean
+-- 1. HÀM CHECK TẬN NƠI UI QUEST
+local function RawHasQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
     
@@ -190,10 +185,29 @@ local function HasActiveQuest(): boolean
     if not mainGui then return false end
 
     local questFrame = mainGui:FindFirstChild("Quest")
-    return questFrame and questFrame.Visible == true
+    if questFrame then
+        if questFrame.Visible == true then return true end
+        local container = questFrame:FindFirstChild("Container")
+        if container and container.Visible == true then return true end
+    end
+
+    return false
 end
 
--- HÀM NHẬN QUEST TỐI ƯU
+-- 2. HÀM CHỐNG BÁO SAI KHI UI CHỚP ẨN TRONG KHẢO SÁT 0.3s (XỬ LÝ TRIỆT ĐỂ LỖI 1 QUÁI)
+local function HasActiveQuest(): boolean
+    if RawHasQuest() then return true end
+
+    -- Đợi 3 lần, mỗi lần 0.1 giây để loại bỏ hoàn toàn hiện tượng chớp ẩn UI khi quái chết
+    for _ = 1, 3 do
+        task.wait(0.1)
+        if RawHasQuest() then return true end
+    end
+
+    return false
+end
+
+-- HÀM NHẬN QUEST AN TOÀN
 local function TakeQuest(): boolean
     if not AutoQuestEnabled or HasActiveQuest() then return true end
 
@@ -202,44 +216,49 @@ local function TakeQuest(): boolean
     if not hrp then return false end
 
     local qInfo = GetCurrentQuestInfo()
-    local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
+    local npcPos = qInfo.NpcPos + Vector3.new(0, 3, 0)
+    local npcCFrame = CFrame.new(npcPos)
 
-    -- Bay đến NPC
+    -- Bay tới vị trí NPC nếu ở xa
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
     if distToNpc > 15 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
         if ActiveTween then ActiveTween:Cancel() end
         
         ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-            CFrame = targetNpcCFrame
+            CFrame = npcCFrame
         })
         ActiveTween:Play()
         task.wait(tweenTime)
     end
 
-    -- Giữ chân nhân vật 0.2s để NPC nhận diện
-    hrp.CFrame = targetNpcCFrame
-    task.wait(0.2)
+    -- Giữ vị trí tại NPC và gửi Remote nhận Quest
+    for retry = 1, 3 do
+        if HasActiveQuest() then return true end
 
-    -- Gọi Remote nhận Quest
-    if CommF then
-        pcall(function()
-            CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
-        end)
+        if hrp then hrp.CFrame = npcCFrame end
+
+        if CommF then
+            pcall(function()
+                CommF:InvokeServer("AbandonQuest")
+                task.wait(0.1)
+                CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
+            end)
+        end
+
+        task.wait(0.4)
     end
 
-    task.wait(0.2)
     return HasActiveQuest()
 end
 
--- SỬA LỖI HITBOX (GIỮ CANCOLLIDE TRÁNH QUÁI RƠI XUYÊN ĐẤT)
 local function ApplyHitbox(enemy: Model)
     if not CONFIG.AutoHitbox then return end
     local hrp = enemy:FindFirstChild("HumanoidRootPart") :: BasePart?
     if hrp then
         hrp.Size = CONFIG.HitboxSize
         hrp.Transparency = CONFIG.HitboxTransparency
-        hrp.CanCollide = true -- Bắt buộc là true để quái không bị lọt map
+        hrp.CanCollide = true
     end
 end
 
@@ -264,7 +283,6 @@ end
 if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
--- THAY THẾ BẰNG VIRTUALUSER CHẠY TỐT TRÊN CẢ PC VÀ MOBILE
 local function ExecuteAttack()
     local char = LocalPlayer.Character
     if not char then return end
@@ -388,7 +406,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (FIXED)"
+TitleLabel.Text = "⚡ AUTO FARM (FLICKER FIXED)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 12
 TitleLabel.Font = Enum.Font.GothamBold
@@ -484,7 +502,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- VÒNG LẶP CHÍNH (STABLE FARM LOOP)
+-- VÒNG LẶP CHÍNH
 local function StopFarm()
     IsFarming = false
     if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
@@ -512,10 +530,15 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Tự động nhận Quest
+                -- 1. Tự động nhận Quest nếu kiểm tra thấy mất Quest
                 if AutoQuestEnabled and not HasActiveQuest() then
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
                     TakeQuest()
+
+                    if not HasActiveQuest() then
+                        task.wait(0.3)
+                        continue
+                    end
                 end
 
                 -- 2. Tấn công quái
