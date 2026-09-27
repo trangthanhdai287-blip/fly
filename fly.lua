@@ -4,7 +4,6 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
 
 -- ================================================================= --
@@ -13,7 +12,7 @@ local VirtualUser = game:GetService("VirtualUser")
 local CONFIG = {
     ToggleFarmKey = Enum.KeyCode.F,
 
-    FarmOffset = Vector3.new(0, 30, 0), -- Đứng cao 30 studs theo yêu cầu của bạn
+    FarmOffset = Vector3.new(0, 30, 0), -- Đứng cao 30 studs
     TweenSpeed = 95,
     AutoEquip = true,
     NoAnimation = true,
@@ -21,8 +20,8 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
 
-    -- Delay đánh
-    AttackDelay = 0.1,
+    -- Delay đánh (Chỉnh 0.05 - 0.1 để tránh bị Server kick)
+    AttackDelay = 0.08,
 
     -- Hitbox Quái
     AutoHitbox = true,
@@ -284,16 +283,15 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- AUTO CLICK HYBRID (FIX DAMAGE 100% CHO BLOX FRUITS)
+-- HÀM AUTO ATTACK TỔNG HỢP (KÍCH HOẠT REMOTE DAMAGE CỦA BLOX FRUITS)
 -- ================================================================= --
-local function ExecuteAutoClick()
-    if not IsFarming then return end
+local function TriggerDamage()
     local char = LocalPlayer.Character
     if not char then return end
 
     EnableHaki()
 
-    -- Auto Equip Vũ Khí
+    -- 1. Tự động lấy và Trang bị Vũ khí
     local tool = char:FindFirstChildOfClass("Tool")
     if not tool and CONFIG.AutoEquip then
         local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
@@ -306,35 +304,43 @@ local function ExecuteAutoClick()
     end
 
     if tool then
+        -- Kích hoạt Tool phía Client
         tool:Activate()
-        
-        -- Ưu tiên 1: Hàm mouse1click() của Executor nếu có
-        if (genv and (genv).mouse1click) or mouse1click then
-            pcall(function() (mouse1click or (genv).mouse1click)() end)
-        else
-            -- Ưu tiên 2: VirtualUser Mô phỏng Click thật
-            VirtualUser:CaptureController()
-            VirtualUser:Button1Down(Vector2.new(500, 500), workspace.CurrentCamera.CFrame)
-            task.wait(0.01)
-            VirtualUser:Button1Up(Vector2.new(500, 500), workspace.CurrentCamera.CFrame)
 
-            -- Ưu tiên 3: Gửi Click vào đúng Tâm Màn Hình Viewport
-            local cam = workspace.CurrentCamera
-            if cam then
-                local center = cam.ViewportSize / 2
-                VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
-                task.wait(0.01)
-                VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
+        -- 2. Bắn RemoteEvent đòn đánh trực tiếp (Bypass Server Check)
+        local netFolder = ReplicatedStorage:FindFirstChild("Net") or ReplicatedStorage
+        local registerAttack = netFolder:FindFirstChild("RegisterAttack") 
+            or netFolder:FindFirstChild("RE/RegisterAttack") 
+            or ReplicatedStorage:FindFirstChild("RigControllerEvent")
+
+        if registerAttack and registerAttack:IsA("RemoteEvent") then
+            pcall(function()
+                registerAttack:FireServer(0.1)
+            end)
+        end
+
+        -- 3. Gọi RemoteEvent trong chính Tool (đối với Melee / Blox Fruit / Sword)
+        for _, obj in ipairs(tool:GetChildren()) do
+            if obj:IsA("RemoteEvent") then
+                pcall(function()
+                    obj:FireServer()
+                end)
             end
         end
+
+        -- 4. Giả lập Click Chuột bằng VirtualUser
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        task.wait(0.01)
+        VirtualUser:Button1Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
     end
 end
 
--- Vòng lặp Auto Click liên tục
+-- Loop Auto Attack
 task.spawn(function()
     while true do
         if IsFarming then
-            ExecuteAutoClick()
+            TriggerDamage()
         end
         task.wait(CONFIG.AttackDelay)
     end
