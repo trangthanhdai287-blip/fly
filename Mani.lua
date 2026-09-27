@@ -181,7 +181,7 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[1]
 end
 
--- KIỂM TRA QUEST ỔN ĐỊNH (CHỐNG CHỚP UI KHI QUÁI CHẾT)
+-- KIỂM TRA QUEST CHÍNH XÁC (XÁC MINH CẢ UI HÀNG CHỜ VÀ VĂN BẢN QUEST)
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
@@ -190,17 +190,35 @@ local function HasActiveQuest(): boolean
     if not mainGui then return false end
 
     local questFrame = mainGui:FindFirstChild("Quest")
-    if questFrame and questFrame.Visible then
-        return true
+    if not questFrame or not questFrame.Visible then return false end
+
+    -- Lấy label thông tin Quest để đảm bảo không phải UI trống
+    local container = questFrame:FindFirstChild("Container")
+    local titleLabel = container and (container:FindFirstChild("QuestTitle") or container:FindFirstChild("Title")) 
+                    or questFrame:FindFirstChild("Title", true)
+
+    if titleLabel and titleLabel:IsA("TextLabel") then
+        local text = string.lower(titleLabel.Text)
+        if text ~= "" and not string.find(text, "none") then
+            return true
+        end
     end
 
-    -- Thử kiểm tra lại sau 0.25s để tránh trường hợp UI đang chớp refresh
-    task.wait(0.25)
-    if questFrame and questFrame.Visible then
-        return true
-    end
+    return questFrame.Visible
+end
 
-    return false
+-- XÁC NHẬN THỰC SỰ ĐÃ HẾT QUEST (Chờ UI đồng bộ tránh chớp khi quái vừa chết)
+local function IsQuestFinished(): boolean
+    if HasActiveQuest() then return false end
+    
+    -- Đợi 1.2 giây và kiểm tra lại 4 lần để chắc chắn UI không chỉ bị chớp/refresh khi quái vừa chết
+    for i = 1, 4 do
+        task.wait(0.3)
+        if HasActiveQuest() then
+            return false
+        end
+    end
+    return true
 end
 
 -- HÀM NHẬN QUEST CHẮC CHẮN
@@ -531,8 +549,8 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Chỉ nhận Quest khi CHẮC CHẮN không có Quest
-                if AutoQuestEnabled and not HasActiveQuest() then
+                -- 1. Chỉ nhận Quest khi CHẮC CHẮN không còn Quest (Xác nhận kỹ bằng IsQuestFinished)
+                if AutoQuestEnabled and IsQuestFinished() then
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
                     TakeQuest()
                 end
@@ -563,6 +581,9 @@ local function StartFarm()
                             ExecuteAttack()
                             task.wait(0.12)
                         end
+
+                        -- Nghỉ 0.3s để game cập nhật thanh tiến trình Quest (Tránh chớp UI)
+                        task.wait(0.3)
                     end
                 else
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tim quai: " .. qInfo.MobName
