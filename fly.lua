@@ -20,10 +20,10 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
 
-    -- Tốc độ Auto Click
-    AttackDelay = 0.02,
+    -- Đã tăng AttackDelay lên 0.08 để tránh nghẽn luồng (đơ game/đơ nút bấm)
+    AttackDelay = 0.08,
 
-    -- Cấu hình Hitbox
+    -- Cấu hình Hitbox (Áp dụng cho cả Mob & Player)
     AutoHitbox = true,
     HitboxSize = Vector3.new(60, 60, 60),
     HitboxTransparency = 0.8,
@@ -113,7 +113,7 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 3, MinLv = 1825,MaxLv = 1849,QuestName = "DeepForestIsland2Quest", QuestLevel = 1, MobName = "Forest Pirate",  NpcPos = Vector3.new(-13230, 332, -7625), MobPos = Vector3.new(-13420, 332, -7910) },
     { Sea = 3, MinLv = 1850,MaxLv = 1899,QuestName = "DeepForestIsland2Quest", QuestLevel = 2, MobName = "Mythological Pirate", NpcPos = Vector3.new(-13230, 332, -7625), MobPos = Vector3.new(-13520, 332, -6910) },
     { Sea = 3, MinLv = 1900,MaxLv = 1924,QuestName = "HauntedQuest1",  QuestLevel = 1, MobName = "Reborn Skeleton",    NpcPos = Vector3.new(-9480, 142, 5520),  MobPos = Vector3.new(-8810, 142, 6030) },
-    { Sea = 3, MinLv = 1925,MaxLv = 1974,QuestName = "HauntedQuest1",  QuestLevel = 2, MobName = "Living Zombie",      NpcPos =Vector3.new(-9480, 142, 5520),  MobPos = Vector3.new(-10110, 142, 5810) },
+    { Sea = 3, MinLv = 1925,MaxLv = 1974,QuestName = "HauntedQuest1",  QuestLevel = 2, MobName = "Living Zombie",      NpcPos = Vector3.new(-9480, 142, 5520),  MobPos = Vector3.new(-10110, 142, 5810) },
     { Sea = 3, MinLv = 1975,MaxLv = 1999,QuestName = "HauntedQuest2",  QuestLevel = 1, MobName = "Demonic Soul",       NpcPos = Vector3.new(-9515, 172, 6070),  MobPos = Vector3.new(-9510, 172, 6720) },
     { Sea = 3, MinLv = 2000,MaxLv = 2049,QuestName = "HauntedQuest2",  QuestLevel = 2, MobName = "Posessed Mummy",     NpcPos = Vector3.new(-9515, 172, 6070),  MobPos = Vector3.new(-9580, 10, 6180) },
     { Sea = 3, MinLv = 2050,MaxLv = 2074,QuestName = "PeanutQuest",    QuestLevel = 1, MobName = "Peanut Scout",       NpcPos = Vector3.new(-2105, 38, -10190),MobPos = Vector3.new(-2120, 38, -10410) },
@@ -222,7 +222,7 @@ local function TakeQuest(): boolean
 
         local checkInterval = 0.1
         for _ = 1, math.floor(tweenTime / checkInterval) do
-            if HasActiveQuest() or not IsFarming then
+            if HasActiveQuest() then
                 if ActiveTween then ActiveTween:Cancel() end
                 return true
             end
@@ -232,13 +232,19 @@ local function TakeQuest(): boolean
 
     if HasActiveQuest() then return true end
 
+    local startWait = os.clock()
+    while os.clock() - startWait < 0.2 do
+        hrp.CFrame = targetNpcCFrame
+        task.wait(0.05)
+    end
+
     if CommF then
         pcall(function()
             CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
         end)
     end
 
-    task.wait(0.3)
+    task.wait(0.5)
     return HasActiveQuest()
 end
 
@@ -299,7 +305,7 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- AUTO CLICK / FAST ATTACK
+-- HÀM AUTO CLICK / FAST ATTACK (CHỈ CHẠY KHI ĐANG BẬT AUTO FARM)
 -- ================================================================= --
 local function ExecuteAutoClick()
     local char = LocalPlayer.Character
@@ -331,10 +337,13 @@ local function ExecuteAutoClick()
     end
 end
 
+-- VÒNG LẶP AUTO CLICK AN TOÀN (CHỈ CHẠY KHI ISFARMING = TRUE)
 task.spawn(function()
     while true do
-        ExecuteAutoClick()
-        ApplyPlayerHitbox()
+        if IsFarming then
+            ExecuteAutoClick()
+            ApplyPlayerHitbox()
+        end
         task.wait(CONFIG.AttackDelay)
     end
 end)
@@ -516,6 +525,7 @@ local function StartFarm()
     FarmBtn.Text = "AUTO FARM: ON (F)"
     FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
 
+    -- VÒNG LẶP DI CHUYỂN BẰNG TWEEN & NHẬN QUEST
     task.spawn(function()
         while IsFarming do
             local char = LocalPlayer.Character
@@ -549,18 +559,13 @@ local function StartFarm()
                         })
                         ActiveTween:Play()
 
-                        if dist > 10 then
-                            local elapsed = 0
-                            while IsFarming and elapsed < tweenTime and targetHum.Health > 0 and target.Parent do
-                                elapsed += 0.05
-                                task.wait(0.05)
-                            end
-                        end
+                        if dist > 10 then task.wait(tweenTime) end
 
                         while IsFarming and targetHum.Health > 0 and target.Parent do
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
                             task.wait(0.05)
                         end
+                        task.wait(0.1)
                     end
                 else
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tìm quái: " .. qInfo.MobName
@@ -577,10 +582,8 @@ local function StartFarm()
                         task.wait(tweenTime)
                     end
                 end
-            else
-                task.wait(0.5)
             end
-            task.wait(0.05)
+            task.wait(0.1)
         end
         StopFarm()
     end)
