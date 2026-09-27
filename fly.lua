@@ -4,10 +4,9 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM, AUTO CLICK & HITBOX
+-- CẤU HÌNH AUTO FARM & HITBOX
 -- ================================================================= --
 local CONFIG = {
     ToggleFarmKey = Enum.KeyCode.F, -- Phím bật/tắt Auto Farm
@@ -20,10 +19,10 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
 
-    -- Tốc độ Auto Click (0.01 = Fast Attack siêu tốc, luôn tự chạy)
+    -- Tốc độ Fast Attack
     AttackDelay = 0.01,
 
-    -- Cấu hình Hitbox (Áp dụng cho cả Mob & Player)
+    -- Cấu hình Hitbox
     AutoHitbox = true,
     HitboxSize = Vector3.new(60, 60, 60),
     HitboxTransparency = 0.8,
@@ -305,9 +304,10 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- HÀM AUTO CLICK / FAST ATTACK TỰ ĐỘNG LỰA CHỌN VÀ ĐÁNH NGẦM
+-- FAST ATTACK / AUTO CLICK AN TOÀN (KHÔNG BỊ CHIẾM CON CHUỘT)
 -- ================================================================= --
 local function ExecuteAutoClick()
+    if not IsFarming then return end -- Chỉ đánh khi bật Auto Farm
     local char = LocalPlayer.Character
     if not char then return end
 
@@ -329,19 +329,19 @@ local function ExecuteAutoClick()
         currentTool:Activate()
     end
 
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-
+    -- Gửi signal đánh trực tiếp, KHÔNG dùng VirtualInputManager để tránh đơ chuột
     if RegisterAttack then
         pcall(function() RegisterAttack:FireServer(0) end)
     end
 end
 
--- VÒNG LẶP AUTO CLICK TỰ CHẠY LIÊN TỤC NGẦM (24/7)
+-- VÒNG LẶP AUTO CLICK
 task.spawn(function()
     while true do
-        ExecuteAutoClick()
-        ApplyPlayerHitbox()
+        if IsFarming then
+            ExecuteAutoClick()
+            ApplyPlayerHitbox()
+        end
         task.wait(CONFIG.AttackDelay)
     end
 end)
@@ -515,6 +515,7 @@ local function StopFarm()
     DisablePhysics()
     FarmBtn.Text = "AUTO FARM: OFF (F)"
     FarmBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+    InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel() .. " | Idle"
 end
 
 local function StartFarm()
@@ -523,7 +524,6 @@ local function StartFarm()
     FarmBtn.Text = "AUTO FARM: ON (F)"
     FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
 
-    -- VÒNG LẶP DI CHUYỂN BẰNG TWEEN & NHẬN QUEST
     task.spawn(function()
         while IsFarming do
             local char = LocalPlayer.Character
