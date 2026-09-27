@@ -10,14 +10,14 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 -- CẤU HÌNH AUTO FARM & HITBOX
 -- ================================================================= --
 local CONFIG = {
-    FarmOffset = Vector3.new(0, 30, 0),
-    TweenSpeed = 95,
+    FarmOffset = Vector3.new(0, 25, 0),
+    TweenSpeed = 350,
     AutoEquip = true,
     NoAnimation = true,
     AutoQuest = true,
-    QuestCooldown = 3.0,
+    QuestCooldown = 1.5,
     AutoHaki = true,
-    AttackDelay = 0.08,
+    AttackDelay = 0.03, -- Tốc độ đánh cực nhanh giống Hub lớn
 
     AutoHitbox = true,
     HitboxSize = Vector3.new(60, 60, 60),
@@ -304,7 +304,7 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- HÀM FAST ATTACK NGẦM
+-- HỆ THỐNG FAST ATTACK (GIỐNG CÁC HUBS LỚN)
 -- ================================================================= --
 local function ExecuteAutoClick()
     local char = LocalPlayer.Character
@@ -317,8 +317,13 @@ local function ExecuteAutoClick()
         if not tool then
             local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
             if backpack then
-                tool = backpack:FindFirstChildOfClass("Tool")
-                if tool then tool.Parent = char end
+                for _, item in ipairs(backpack:GetChildren()) do
+                    if item:IsA("Tool") then
+                        item.Parent = char
+                        tool = item
+                        break
+                    end
+                end
             end
         end
     end
@@ -328,18 +333,22 @@ local function ExecuteAutoClick()
         currentTool:Activate()
     end
 
+    pcall(function()
+        if RegisterAttack then
+            RegisterAttack:FireServer(0)
+        end
+    end)
+
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-
-    if RegisterAttack then
-        pcall(function() RegisterAttack:FireServer(0) end)
-    end
 end
 
 task.spawn(function()
     while true do
-        ExecuteAutoClick()
-        ApplyPlayerHitbox()
+        if IsFarming then
+            ExecuteAutoClick()
+            ApplyPlayerHitbox()
+        end
         task.wait(CONFIG.AttackDelay)
     end
 end)
@@ -403,7 +412,7 @@ local function GetTargetEnemy(): Model?
 end
 
 -- ================================================================= --
--- MODERN HUB UI SETUP (GIỐNG CÁC HUB NỔI TIẾNG)
+-- MODERN HUB UI SETUP
 -- ================================================================= --
 local function GetGuiParent(): Instance
     local success, result = pcall(function() return game:GetService("CoreGui") end)
@@ -449,7 +458,6 @@ local TopBarCorner = Instance.new("UICorner")
 TopBarCorner.CornerRadius = UDim.new(0, 10)
 TopBarCorner.Parent = TopBar
 
--- Sửa góc bo tròn dưới của TopBar cho phẳng
 local CoverCorner = Instance.new("Frame")
 CoverCorner.Size = UDim2.new(1, 0, 0, 10)
 CoverCorner.Position = UDim2.new(0, 0, 1, -10)
@@ -461,7 +469,7 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(0, 200, 1, 0)
 TitleLabel.Position = UDim2.new(0, 15, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ PREMIER HUB"
+TitleLabel.Text = "⚡ PREMIER HUB (FAST ATTACK)"
 TitleLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
 TitleLabel.TextSize = 13
 TitleLabel.Font = Enum.Font.GothamBold
@@ -507,7 +515,7 @@ ContentContainer.Position = UDim2.new(0, 135, 0, 45)
 ContentContainer.BackgroundTransparency = 1
 ContentContainer.Parent = MainFrame
 
--- Status Bar dưới cùng (Hiển thị Sea và Level)
+-- Status Bar
 local InfoLabel = Instance.new("TextLabel")
 InfoLabel.Size = UDim2.new(1, -140, 0, 25)
 InfoLabel.Position = UDim2.new(0, 135, 1, -28)
@@ -519,7 +527,6 @@ InfoLabel.Font = Enum.Font.GothamMedium
 InfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 InfoLabel.Parent = MainFrame
 
--- Quản lý Tab
 local Tabs = {}
 local CurrentActiveTab = nil
 
@@ -633,11 +640,9 @@ local function CreateToggle(parent: ScrollingFrame, title: string, defaultState:
     end)
 end
 
--- Tạo các Tab giao diện
 local FarmTab = CreateTab("Farm")
 local SettingsTab = CreateTab("Settings")
 
--- Thêm tính năng vào Tab Farm
 CreateToggle(FarmTab, "Auto Farm Level", false, function(state)
     if state then
         if IsFarming then return end
@@ -711,7 +716,6 @@ CreateToggle(FarmTab, "Auto Quest", CONFIG.AutoQuest, function(state)
     CONFIG.AutoQuest = state
 end)
 
--- Thêm tính năng vào Tab Settings
 CreateToggle(SettingsTab, "Auto Haki", CONFIG.AutoHaki, function(state)
     CONFIG.AutoHaki = state
     if state then EnableHaki() end
@@ -729,7 +733,7 @@ CreateToggle(SettingsTab, "Auto Hitbox (60x60)", CONFIG.AutoHitbox, function(sta
     CONFIG.AutoHitbox = state
 end)
 
--- Kéo thả cửa sổ (Draggable)
+-- Draggable UI
 local dragging, dragStart, startPos
 TopBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
