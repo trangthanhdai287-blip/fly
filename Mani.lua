@@ -7,7 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM (FIXED REPEATED QUEST ISSUE)
+-- CẤU HÌNH AUTO FARM (FIXED REPEATED QUEST ISSUE + QUEST DELAY)
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
@@ -16,6 +16,7 @@ local CONFIG = {
     AutoEquip = true,                       -- Tự lấy vũ khí
     NoAnimation = true,                     -- Bỏ Animation đánh
     AutoQuest = true,                       -- Tự động nhận Quest
+    QuestDelay = 1.5,                       -- THỜI GIAN DELAY (GIÂY) TRƯỚC KHU BẮT ĐẦU ĐI NHẬN QUEST TIẾP
     AutoHaki = true,                        -- Tự động bật Haki
 
     -- Cấu hình Hitbox
@@ -181,7 +182,7 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[1]
 end
 
--- KIỂM TRA QUEST CHÍNH XÁC (XÁC MINH CẢ UI HÀNG CHỜ VÀ VĂN BẢN QUEST)
+-- KIỂM TRA QUEST CHÍNH XÁC
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
@@ -192,7 +193,6 @@ local function HasActiveQuest(): boolean
     local questFrame = mainGui:FindFirstChild("Quest")
     if not questFrame or not questFrame.Visible then return false end
 
-    -- Lấy label thông tin Quest để đảm bảo không phải UI trống
     local container = questFrame:FindFirstChild("Container")
     local titleLabel = container and (container:FindFirstChild("QuestTitle") or container:FindFirstChild("Title")) 
                     or questFrame:FindFirstChild("Title", true)
@@ -207,13 +207,13 @@ local function HasActiveQuest(): boolean
     return questFrame.Visible
 end
 
--- XÁC NHẬN THỰC SỰ ĐÃ HẾT QUEST (Chờ UI đồng bộ tránh chớp khi quái vừa chết)
+-- XÁC NHẬN CHẮC CHẮN ĐÃ HOÀN THÀNH QUEST
 local function IsQuestFinished(): boolean
     if HasActiveQuest() then return false end
     
-    -- Đợi 1.2 giây và kiểm tra lại 4 lần để chắc chắn UI không chỉ bị chớp/refresh khi quái vừa chết
+    -- Kiểm tra 4 lần trong 1.6 giây để chắc chắn UI không bị chớp giật
     for i = 1, 4 do
-        task.wait(0.3)
+        task.wait(0.4)
         if HasActiveQuest() then
             return false
         end
@@ -549,10 +549,16 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Chỉ nhận Quest khi CHẮC CHẮN không còn Quest (Xác nhận kỹ bằng IsQuestFinished)
+                -- 1. CHỈ NHẬN QUEST KHI CHẮC CHẮN KHÔNG CÒN QUEST + ÁP DỤNG QUEST DELAY
                 if AutoQuestEnabled and IsQuestFinished() then
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
-                    TakeQuest()
+                    InfoLabel.Text = "Chờ delay " .. CONFIG.QuestDelay .. "s trước khi nhận Quest mới..."
+                    task.wait(CONFIG.QuestDelay)
+
+                    -- Kiểm tra lại lần cuối xem sau delay có thực sự hết Quest không
+                    if IsQuestFinished() then
+                        InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
+                        TakeQuest()
+                    end
                 end
 
                 -- 2. Đánh quái
@@ -582,8 +588,7 @@ local function StartFarm()
                             task.wait(0.12)
                         end
 
-                        -- Nghỉ 0.3s để game cập nhật thanh tiến trình Quest (Tránh chớp UI)
-                        task.wait(0.3)
+                        task.wait(0.2)
                     end
                 else
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tim quai: " .. qInfo.MobName
