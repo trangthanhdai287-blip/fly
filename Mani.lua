@@ -4,15 +4,15 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM (FIXED QUEST FLICKER)
+-- CẤU HÌNH AUTO FARM (FIXED REPEATED QUEST ISSUE)
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
-    FarmOffset = Vector3.new(0, 9, 0),      -- Độ cao đứng trên đầu quái
-    TweenSpeed = 100,                       -- Tốc độ bay
+    FarmOffset = Vector3.new(0, 10, 0),     -- Độ cao đứng trên đầu quái
+    TweenSpeed = 95,                        -- Tốc độ bay
     AutoEquip = true,                       -- Tự lấy vũ khí
     NoAnimation = true,                     -- Bỏ Animation đánh
     AutoQuest = true,                       -- Tự động nhận Quest
@@ -20,7 +20,7 @@ local CONFIG = {
 
     -- Cấu hình Hitbox
     AutoHitbox = true,                      
-    HitboxSize = Vector3.new(20, 20, 20),   
+    HitboxSize = Vector3.new(25, 25, 25),   
     HitboxTransparency = 0.7,               
 }
 
@@ -35,11 +35,16 @@ type QuestData = {
     MobPos: Vector3
 }
 
+-- NHẬN DIỆN SEA QUA PLACEID
 local function GetCurrentSea(): number
     local placeId = game.PlaceId
-    if placeId == 2753915549 then return 1
-    elseif placeId == 4442272183 then return 2
-    elseif placeId == 7449423635 then return 3 end
+    if placeId == 2753915549 then
+        return 1
+    elseif placeId == 4442272183 then
+        return 2
+    elseif placeId == 7449423635 then
+        return 3
+    end
     return 1
 end
 
@@ -122,7 +127,7 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 3, MinLv = 2325,MaxLv = 2374,QuestName = "ChocolatierQuest",QuestLevel = 1, MobName = "Cocoa Warrior",     NpcPos = Vector3.new(220, 24, -12100),  MobPos = Vector3.new(210, 24, -12410) },
     { Sea = 3, MinLv = 2375,MaxLv = 2399,QuestName = "ChocolatierQuest",QuestLevel = 2, MobName = "Chocolate Bar Battler",NpcPos = Vector3.new(220, 24, -12100),MobPos = Vector3.new(580, 24, -12410) },
     { Sea = 3, MinLv = 2400,MaxLv = 2449,QuestName = "CandyQuest",     QuestLevel = 1, MobName = "Sweet Thief",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1150, 15, -14550) },
-    { Sea = 3, MinLv = 2450,MaxLv = 2600,QuestName = "CandyQuest",     QuestLevel = 2, MobName = "Candy Rebel",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1420, 15, -14550) },
+    { Sea = 3, MinLv = 2450,MaxLv = 2550,QuestName = "CandyQuest",     QuestLevel = 2, MobName = "Candy Rebel",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1420, 15, -14550) },
 }
 
 local LocalPlayer = Players.LocalPlayer
@@ -176,8 +181,8 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[1]
 end
 
--- 1. HÀM CHECK TẬN NƠI UI QUEST
-local function RawHasQuest(): boolean
+-- KIỂM TRA QUEST ỔN ĐỊNH (CHỐNG CHỚP UI KHI QUÁI CHẾT)
+local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
     
@@ -185,29 +190,20 @@ local function RawHasQuest(): boolean
     if not mainGui then return false end
 
     local questFrame = mainGui:FindFirstChild("Quest")
-    if questFrame then
-        if questFrame.Visible == true then return true end
-        local container = questFrame:FindFirstChild("Container")
-        if container and container.Visible == true then return true end
+    if questFrame and questFrame.Visible then
+        return true
+    end
+
+    -- Thử kiểm tra lại sau 0.25s để tránh trường hợp UI đang chớp refresh
+    task.wait(0.25)
+    if questFrame and questFrame.Visible then
+        return true
     end
 
     return false
 end
 
--- 2. HÀM CHỐNG BÁO SAI KHI UI CHỚP ẨN TRONG KHẢO SÁT 0.3s (XỬ LÝ TRIỆT ĐỂ LỖI 1 QUÁI)
-local function HasActiveQuest(): boolean
-    if RawHasQuest() then return true end
-
-    -- Đợi 3 lần, mỗi lần 0.1 giây để loại bỏ hoàn toàn hiện tượng chớp ẩn UI khi quái chết
-    for _ = 1, 3 do
-        task.wait(0.1)
-        if RawHasQuest() then return true end
-    end
-
-    return false
-end
-
--- HÀM NHẬN QUEST AN TOÀN
+-- HÀM NHẬN QUEST CHẮC CHẮN
 local function TakeQuest(): boolean
     if not AutoQuestEnabled or HasActiveQuest() then return true end
 
@@ -216,37 +212,39 @@ local function TakeQuest(): boolean
     if not hrp then return false end
 
     local qInfo = GetCurrentQuestInfo()
-    local npcPos = qInfo.NpcPos + Vector3.new(0, 3, 0)
-    local npcCFrame = CFrame.new(npcPos)
+    local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
 
-    -- Bay tới vị trí NPC nếu ở xa
+    -- 1. Bay đến NPC
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
-    if distToNpc > 15 then
+    if distToNpc > 10 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
         if ActiveTween then ActiveTween:Cancel() end
         
         ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-            CFrame = npcCFrame
+            CFrame = targetNpcCFrame
         })
         ActiveTween:Play()
         task.wait(tweenTime)
     end
 
-    -- Giữ vị trí tại NPC và gửi Remote nhận Quest
+    -- 2. Giữ chân nhân vật 0.4s để Server xác nhận đứng cạnh NPC
+    local startWait = os.clock()
+    while os.clock() - startWait < 0.4 do
+        hrp.CFrame = targetNpcCFrame
+        task.wait(0.05)
+    end
+
+    -- 3. Gọi RemoteFunction nhận Quest
     for retry = 1, 3 do
         if HasActiveQuest() then return true end
 
-        if hrp then hrp.CFrame = npcCFrame end
-
         if CommF then
             pcall(function()
-                CommF:InvokeServer("AbandonQuest")
-                task.wait(0.1)
                 CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
             end)
         end
 
-        task.wait(0.4)
+        task.wait(0.3)
     end
 
     return HasActiveQuest()
@@ -254,11 +252,14 @@ end
 
 local function ApplyHitbox(enemy: Model)
     if not CONFIG.AutoHitbox then return end
-    local hrp = enemy:FindFirstChild("HumanoidRootPart") :: BasePart?
-    if hrp then
-        hrp.Size = CONFIG.HitboxSize
-        hrp.Transparency = CONFIG.HitboxTransparency
-        hrp.CanCollide = true
+    for _, part in ipairs(enemy:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if part.Name == "HumanoidRootPart" or part.Name == "Head" then
+                part.Size = CONFIG.HitboxSize
+                part.Transparency = CONFIG.HitboxTransparency
+                part.CanCollide = false
+            end
+        end
     end
 end
 
@@ -303,8 +304,8 @@ local function ExecuteAttack()
     local currentTool = char:FindFirstChildOfClass("Tool")
     if currentTool then currentTool:Activate() end
 
-    VirtualUser:CaptureController()
-    VirtualUser:Button1Down(Vector2.new(0, 0))
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 
     if RegisterAttack then
         pcall(function() RegisterAttack:FireServer(0) end)
@@ -406,9 +407,9 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (FLICKER FIXED)"
+TitleLabel.Text = "⚡ AUTO FARM (STABLE QUEST)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.TextSize = 12
+TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.Parent = MainFrame
 
@@ -502,7 +503,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- VÒNG LẶP CHÍNH
+-- VÒNG LẶP CHÍNH (STABLE FARM LOOP)
 local function StopFarm()
     IsFarming = false
     if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
@@ -530,18 +531,13 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Tự động nhận Quest nếu kiểm tra thấy mất Quest
+                -- 1. Chỉ nhận Quest khi CHẮC CHẮN không có Quest
                 if AutoQuestEnabled and not HasActiveQuest() then
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
                     TakeQuest()
-
-                    if not HasActiveQuest() then
-                        task.wait(0.3)
-                        continue
-                    end
                 end
 
-                -- 2. Tấn công quái
+                -- 2. Đánh quái
                 local target = GetTargetEnemy()
 
                 if target then
@@ -552,23 +548,24 @@ local function StartFarm()
                     if targetHrp and targetHum and targetHum.Health > 0 then
                         local targetPos = targetHrp.Position + CONFIG.FarmOffset
                         local dist = (targetPos - hrp.Position).Magnitude
+                        local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
 
-                        if dist > 15 then
-                            local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
-                            if ActiveTween then ActiveTween:Cancel() end
-                            ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
-                                CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
-                            })
-                            ActiveTween:Play()
-                            task.wait(tweenTime)
-                        else
-                            hrp.CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
+                        if ActiveTween then ActiveTween:Cancel() end
+                        ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+                            CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
+                        })
+                        ActiveTween:Play()
+
+                        if dist > 10 then task.wait(tweenTime) end
+
+                        while IsFarming and targetHum.Health > 0 and target.Parent do
+                            hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
+                            ExecuteAttack()
+                            task.wait(0.12)
                         end
-
-                        ExecuteAttack()
                     end
                 else
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tìm quái: " .. qInfo.MobName
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tim quai: " .. qInfo.MobName
                     local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
                     local distToMobPos = (targetMobPos - hrp.Position).Magnitude
 
@@ -583,7 +580,7 @@ local function StartFarm()
                     end
                 end
             end
-            task.wait(0.05)
+            task.wait(0.2)
         end
         StopFarm()
     end)
