@@ -4,6 +4,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser") -- Dùng VirtualUser để click không bị đơ chuột
 
 -- ================================================================= --
 -- CẤU HÌNH AUTO FARM & HITBOX
@@ -19,8 +20,8 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
 
-    -- Tốc độ Fast Attack
-    AttackDelay = 0.01,
+    -- Tốc độ Auto Click
+    AttackDelay = 0.05,
 
     -- Cấu hình Hitbox
     AutoHitbox = true,
@@ -136,7 +137,6 @@ local NoclipConn: RBXScriptConnection? = nil
 local BodyVel: BodyVelocity? = nil
 local LastQuestAttempt = 0
 
-local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
 local function EnableHaki()
@@ -304,15 +304,16 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- FAST ATTACK / AUTO CLICK AN TOÀN (KHÔNG BỊ CHIẾM CON CHUỘT)
+-- AUTO CLICK VIRTUALUSER (GÂY DAMAGE 100% MÀ KHÔNG KHÓA CHUỘT THẬT)
 -- ================================================================= --
 local function ExecuteAutoClick()
-    if not IsFarming then return end -- Chỉ đánh khi bật Auto Farm
+    if not IsFarming then return end
     local char = LocalPlayer.Character
     if not char then return end
 
     EnableHaki()
 
+    -- Tự động cầm vũ khí
     if CONFIG.AutoEquip then
         local tool = char:FindFirstChildOfClass("Tool")
         if not tool then
@@ -324,15 +325,9 @@ local function ExecuteAutoClick()
         end
     end
 
-    local currentTool = char:FindFirstChildOfClass("Tool")
-    if currentTool then
-        currentTool:Activate()
-    end
-
-    -- Gửi signal đánh trực tiếp, KHÔNG dùng VirtualInputManager để tránh đơ chuột
-    if RegisterAttack then
-        pcall(function() RegisterAttack:FireServer(0) end)
-    end
+    -- Sử dụng VirtualUser bắn tín hiệu MouseClick trực tiếp vào Engine game
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton1(Vector2.new(500, 500))
 end
 
 -- VÒNG LẶP AUTO CLICK
