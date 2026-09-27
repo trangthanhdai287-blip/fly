@@ -26,7 +26,7 @@ local CONFIG = {
     AutoHitbox = true,
 
     -- Hitbox lớn hơn
-    HitboxSize = Vector3.new(5l60, 60, 60),
+    HitboxSize = Vector3.new(60, 60, 60),
 
     -- Ẩn hoàn toàn Hitbox
     HitboxTransparency = 1,
