@@ -7,7 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM (FIXED REPEATED QUEST ISSUE + QUEST DELAY)
+-- CẤU HÌNH AUTO FARM
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
@@ -16,7 +16,7 @@ local CONFIG = {
     AutoEquip = true,                       -- Tự lấy vũ khí
     NoAnimation = true,                     -- Bỏ Animation đánh
     AutoQuest = true,                       -- Tự động nhận Quest
-    QuestDelay = 1.5,                       -- THỜI GIAN DELAY (GIÂY) TRƯỚC KHU BẮT ĐẦU ĐI NHẬN QUEST TIẾP
+    QuestCooldown = 3.0,                    -- Thời gian chờ tối thiểu giữa các lần nhận Quest
     AutoHaki = true,                        -- Tự động bật Haki
 
     -- Cấu hình Hitbox
@@ -36,16 +36,11 @@ type QuestData = {
     MobPos: Vector3
 }
 
--- NHẬN DIỆN SEA QUA PLACEID
 local function GetCurrentSea(): number
     local placeId = game.PlaceId
-    if placeId == 2753915549 then
-        return 1
-    elseif placeId == 4442272183 then
-        return 2
-    elseif placeId == 7449423635 then
-        return 3
-    end
+    if placeId == 2753915549 then return 1
+    elseif placeId == 4442272183 then return 2
+    elseif placeId == 7449423635 then return 3 end
     return 1
 end
 
@@ -137,6 +132,7 @@ local AutoQuestEnabled = CONFIG.AutoQuest
 local ActiveTween: Tween? = nil
 local NoclipConn: RBXScriptConnection? = nil
 local BodyVel: BodyVelocity? = nil
+local LastQuestAttempt = 0
 
 local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
@@ -145,9 +141,7 @@ local function EnableHaki()
     if not CONFIG.AutoHaki then return end
     local char = LocalPlayer.Character
     if char and not char:FindFirstChild("HasBuso") then
-        if CommF then
-            pcall(function() CommF:InvokeServer("Buso") end)
-        end
+        if CommF then pcall(function() CommF:InvokeServer("Buso") end) end
     end
 end
 
@@ -163,7 +157,6 @@ end
 local function GetCurrentQuestInfo(): QuestData
     local myLevel = GetPlayerLevel()
     local currentSea = GetCurrentSea()
-    
     local matchedQuest: QuestData? = nil
     local lastQuestOfSea: QuestData? = nil
 
@@ -182,48 +175,51 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[1]
 end
 
--- KIỂM TRA QUEST CHÍNH XÁC
+-- ================================================================= --
+-- HÀM CHECK QUEST SỬA LỖI (KIỂM TRA VISIBLE CỦA TRACKEDQUESTFRAME)
+-- ================================================================= --
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
     
-    local mainGui = playerGui:FindFirstChild("Main")
-    if not mainGui then return false end
-
-    local questFrame = mainGui:FindFirstChild("Quest")
-    if not questFrame or not questFrame.Visible then return false end
-
-    local container = questFrame:FindFirstChild("Container")
-    local titleLabel = container and (container:FindFirstChild("QuestTitle") or container:FindFirstChild("Title")) 
-                    or questFrame:FindFirstChild("Title", true)
-
-    if titleLabel and titleLabel:IsA("TextLabel") then
-        local text = string.lower(titleLabel.Text)
-        if text ~= "" and not string.find(text, "none") then
-            return true
-        end
-    end
-
-    return questFrame.Visible
-end
-
--- XÁC NHẬN CHẮC CHẮN ĐÃ HOÀN THÀNH QUEST
-local function IsQuestFinished(): boolean
-    if HasActiveQuest() then return false end
-    
-    -- Kiểm tra 4 lần trong 1.6 giây để chắc chắn UI không bị chớp giật
-    for i = 1, 4 do
-        task.wait(0.4)
-        if HasActiveQuest() then
+    local trackedFrame = playerGui:FindFirstChild("TrackedQuestFrame", true)
+    if trackedFrame then
+        -- 1. Nếu TrackedQuestFrame bị ẩn -> Chưa có/đã xong Quest
+        if trackedFrame:IsA("GuiObject") and not trackedFrame.Visible then
             return false
         end
+
+        local frame = trackedFrame:FindFirstChild("Frame") :: GuiObject?
+        if frame then
+            -- 2. Nếu Frame bên trong bị ẩn -> Chưa có Quest
+            if not frame.Visible then
+                return false
+            end
+
+            local progressLabel = frame:FindFirstChild("progress", true) :: TextLabel?
+            local headerLabel = frame:FindFirstChild("header", true) :: TextLabel?
+
+            -- 3. Kiểm tra xem text tiến độ (0/8...) hoặc header có hiển thị không
+            if progressLabel and progressLabel.Text ~= "" and progressLabel.Text ~= "0" then
+                return true
+            end
+            if headerLabel and headerLabel.Text ~= "" then
+                return true
+            end
+        end
     end
-    return true
+
+    return false
 end
 
--- HÀM NHẬN QUEST CHẮC CHẮN
 local function TakeQuest(): boolean
     if not AutoQuestEnabled or HasActiveQuest() then return true end
+
+    -- Tránh việc gọi nhận Quest quá nhanh liên tục làm nhân vật bị kéo lùi lại
+    if os.clock() - LastQuestAttempt < CONFIG.QuestCooldown then
+        return false
+    end
+    LastQuestAttempt = os.clock()
 
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -232,7 +228,6 @@ local function TakeQuest(): boolean
     local qInfo = GetCurrentQuestInfo()
     local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
 
-    -- 1. Bay đến NPC
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
     if distToNpc > 10 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
@@ -242,29 +237,32 @@ local function TakeQuest(): boolean
             CFrame = targetNpcCFrame
         })
         ActiveTween:Play()
-        task.wait(tweenTime)
+        
+        local checkInterval = 0.1
+        for _ = 1, math.floor(tweenTime / checkInterval) do
+            if HasActiveQuest() then
+                if ActiveTween then ActiveTween:Cancel() end
+                return true
+            end
+            task.wait(checkInterval)
+        end
     end
 
-    -- 2. Giữ chân nhân vật 0.4s để Server xác nhận đứng cạnh NPC
+    if HasActiveQuest() then return true end
+
     local startWait = os.clock()
-    while os.clock() - startWait < 0.4 do
+    while os.clock() - startWait < 0.2 do
         hrp.CFrame = targetNpcCFrame
         task.wait(0.05)
     end
 
-    -- 3. Gọi RemoteFunction nhận Quest
-    for retry = 1, 3 do
-        if HasActiveQuest() then return true end
-
-        if CommF then
-            pcall(function()
-                CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
-            end)
-        end
-
-        task.wait(0.3)
+    if CommF then
+        pcall(function()
+            CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
+        end)
     end
 
+    task.wait(0.5)
     return HasActiveQuest()
 end
 
@@ -425,7 +423,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (STABLE QUEST)"
+TitleLabel.Text = "⚡ AUTO FARM (TRACKED QUEST FIXED)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
@@ -521,7 +519,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- VÒNG LẶP CHÍNH (STABLE FARM LOOP)
+-- VÒNG LẶP CHÍNH
 local function StopFarm()
     IsFarming = false
     if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
@@ -546,26 +544,19 @@ local function StartFarm()
                 EnablePhysics(hrp)
                 EnableHaki()
 
-                local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. CHỈ NHẬN QUEST KHI CHẮC CHẮN KHÔNG CÒN QUEST + ÁP DỤNG QUEST DELAY
-                if AutoQuestEnabled and IsQuestFinished() then
-                    InfoLabel.Text = "Chờ delay " .. CONFIG.QuestDelay .. "s trước khi nhận Quest mới..."
-                    task.wait(CONFIG.QuestDelay)
-
-                    -- Kiểm tra lại lần cuối xem sau delay có thực sự hết Quest không
-                    if IsQuestFinished() then
-                        InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
-                        TakeQuest()
-                    end
+                -- 1. KIỂM TRA & NHẬN QUEST
+                if AutoQuestEnabled and not HasActiveQuest() then
+                    InfoLabel.Text = "Đang đi nhận Quest..."
+                    TakeQuest()
                 end
 
-                -- 2. Đánh quái
+                -- 2. ĐÁNH QUÁI
                 local target = GetTargetEnemy()
 
                 if target then
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Target: " .. qInfo.MobName
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Farm: " .. qInfo.MobName
                     local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart
                     local targetHum = target:FindFirstChildOfClass("Humanoid")
 
@@ -588,10 +579,10 @@ local function StartFarm()
                             task.wait(0.12)
                         end
 
-                        task.wait(0.2)
+                        task.wait(0.1)
                     end
                 else
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tim quai: " .. qInfo.MobName
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tìm quái: " .. qInfo.MobName
                     local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
                     local distToMobPos = (targetMobPos - hrp.Position).Magnitude
 
@@ -606,7 +597,7 @@ local function StartFarm()
                     end
                 end
             end
-            task.wait(0.2)
+            task.wait(0.15)
         end
         StopFarm()
     end)
