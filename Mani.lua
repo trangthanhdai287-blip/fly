@@ -7,7 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM (FIXED QUEST TAKING)
+-- CẤU HÌNH AUTO FARM (FIXED REPEATED QUEST ISSUE)
 -- ================================================================= --
 local CONFIG = {
     ToggleKey = Enum.KeyCode.F,             -- Phím Bật/Tắt Auto Farm
@@ -181,7 +181,7 @@ local function GetCurrentQuestInfo(): QuestData
     return QUEST_DATABASE[1]
 end
 
--- KIỂM TRA CHÍNH XÁC QUEST ĐANG HOẠT ĐỘNG
+-- KIỂM TRA QUEST ỔN ĐỊNH (CHỐNG CHỚP UI KHI QUÁI CHẾT)
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
@@ -194,10 +194,16 @@ local function HasActiveQuest(): boolean
         return true
     end
 
+    -- Thử kiểm tra lại sau 0.25s để tránh trường hợp UI đang chớp refresh
+    task.wait(0.25)
+    if questFrame and questFrame.Visible then
+        return true
+    end
+
     return false
 end
 
--- HÀM NHẬN QUEST ĐÃ FIX TRIỆT ĐỂ
+-- HÀM NHẬN QUEST CHẮC CHẮN
 local function TakeQuest(): boolean
     if not AutoQuestEnabled or HasActiveQuest() then return true end
 
@@ -208,7 +214,7 @@ local function TakeQuest(): boolean
     local qInfo = GetCurrentQuestInfo()
     local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
 
-    -- 1. Bay sát tới NPC
+    -- 1. Bay đến NPC
     local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
     if distToNpc > 10 then
         local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
@@ -221,14 +227,14 @@ local function TakeQuest(): boolean
         task.wait(tweenTime)
     end
 
-    -- 2. Giữ chân nhân vật tại vị trí NPC 0.4s để Server đồng bộ vị trí
+    -- 2. Giữ chân nhân vật 0.4s để Server xác nhận đứng cạnh NPC
     local startWait = os.clock()
     while os.clock() - startWait < 0.4 do
         hrp.CFrame = targetNpcCFrame
         task.wait(0.05)
     end
 
-    -- 3. Gọi RemoteFunction nhận Quest (Thử lại tối đa 3 lần)
+    -- 3. Gọi RemoteFunction nhận Quest
     for retry = 1, 3 do
         if HasActiveQuest() then return true end
 
@@ -401,7 +407,7 @@ MainStroke.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM (FIXED QUEST)"
+TitleLabel.Text = "⚡ AUTO FARM (STABLE QUEST)"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 11
 TitleLabel.Font = Enum.Font.GothamBold
@@ -497,7 +503,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- VÒNG LẶP CHÍNH (FARM LOOP)
+-- VÒNG LẶP CHÍNH (STABLE FARM LOOP)
 local function StopFarm()
     IsFarming = false
     if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
@@ -525,13 +531,13 @@ local function StartFarm()
                 local currentLv = GetPlayerLevel()
                 local qInfo = GetCurrentQuestInfo()
 
-                -- 1. Ưu tiên nhận Quest trước
+                -- 1. Chỉ nhận Quest khi CHẮC CHẮN không có Quest
                 if AutoQuestEnabled and not HasActiveQuest() then
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Lv: " .. currentLv .. " | Đang nhận Quest..."
                     TakeQuest()
                 end
 
-                -- 2. Đánh quái khi đã có Quest (hoặc tắt AutoQuest)
+                -- 2. Đánh quái
                 local target = GetTargetEnemy()
 
                 if target then
@@ -559,7 +565,7 @@ local function StartFarm()
                         end
                     end
                 else
-                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Bay đến bãi: " .. qInfo.MobName
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tim quai: " .. qInfo.MobName
                     local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
                     local distToMobPos = (targetMobPos - hrp.Position).Magnitude
 
