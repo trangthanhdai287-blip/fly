@@ -4,6 +4,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
 
 -- ================================================================= --
@@ -12,7 +13,7 @@ local VirtualUser = game:GetService("VirtualUser")
 local CONFIG = {
     ToggleFarmKey = Enum.KeyCode.F,
 
-    FarmOffset = Vector3.new(0, 30, 0),
+    FarmOffset = Vector3.new(0, 30, 0), -- Đứng cao 30 studs theo yêu cầu của bạn
     TweenSpeed = 95,
     AutoEquip = true,
     NoAnimation = true,
@@ -20,10 +21,10 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
 
-    -- Tốc độ Auto Click
-    AttackDelay = 0.05,
+    -- Delay đánh
+    AttackDelay = 0.1,
 
-    -- Cấu hình Hitbox
+    -- Hitbox Quái
     AutoHitbox = true,
     HitboxSize = Vector3.new(60, 60, 60),
     HitboxTransparency = 0.8,
@@ -260,27 +261,6 @@ local function ApplyHitbox(enemy: Model)
     end
 end
 
-local function ApplyPlayerHitbox()
-    if not CONFIG.AutoHitbox then return end
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local hrp = player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-            local head = player.Character:FindFirstChild("Head") :: BasePart?
-
-            if hrp then
-                hrp.Size = CONFIG.HitboxSize
-                hrp.Transparency = CONFIG.HitboxTransparency
-                hrp.CanCollide = false
-            end
-            if head then
-                head.Size = CONFIG.HitboxSize
-                head.Transparency = CONFIG.HitboxTransparency
-                head.CanCollide = false
-            end
-        end
-    end
-end
-
 local function HookNoAnim(char: Model)
     local hum = char:WaitForChild("Humanoid", 5) :: Humanoid?
     if not hum then return end
@@ -304,7 +284,7 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- AUTO CLICK VIRTUALUSER (ĐÃ SỬA GÂY DAMAGE 100%)
+-- AUTO CLICK HYBRID (FIX DAMAGE 100% CHO BLOX FRUITS)
 -- ================================================================= --
 local function ExecuteAutoClick()
     if not IsFarming then return end
@@ -313,7 +293,7 @@ local function ExecuteAutoClick()
 
     EnableHaki()
 
-    -- 1. Equip Tool
+    -- Auto Equip Vũ Khí
     local tool = char:FindFirstChildOfClass("Tool")
     if not tool and CONFIG.AutoEquip then
         local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
@@ -325,22 +305,36 @@ local function ExecuteAutoClick()
         end
     end
 
-    -- 2. Đánh thật để kích hoạt Damage
     if tool then
         tool:Activate()
-        VirtualUser:CaptureController()
-        VirtualUser:Button1Down(Vector2.new(0, 0))
-        task.wait(0.01)
-        VirtualUser:Button1Up(Vector2.new(0, 0))
+        
+        -- Ưu tiên 1: Hàm mouse1click() của Executor nếu có
+        if (genv and (genv).mouse1click) or mouse1click then
+            pcall(function() (mouse1click or (genv).mouse1click)() end)
+        else
+            -- Ưu tiên 2: VirtualUser Mô phỏng Click thật
+            VirtualUser:CaptureController()
+            VirtualUser:Button1Down(Vector2.new(500, 500), workspace.CurrentCamera.CFrame)
+            task.wait(0.01)
+            VirtualUser:Button1Up(Vector2.new(500, 500), workspace.CurrentCamera.CFrame)
+
+            -- Ưu tiên 3: Gửi Click vào đúng Tâm Màn Hình Viewport
+            local cam = workspace.CurrentCamera
+            if cam then
+                local center = cam.ViewportSize / 2
+                VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
+                task.wait(0.01)
+                VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
+            end
+        end
     end
 end
 
--- VÒNG LẶP AUTO CLICK
+-- Vòng lặp Auto Click liên tục
 task.spawn(function()
     while true do
         if IsFarming then
             ExecuteAutoClick()
-            ApplyPlayerHitbox()
         end
         task.wait(CONFIG.AttackDelay)
     end
