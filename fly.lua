@@ -4,10 +4,11 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local LocalPlayer = Players.LocalPlayer
 
 -- ================================================================= --
--- CẤU HÌNH AUTO FARM, AUTO CLICK & HITBOX
+-- CẤU HÌNH HỆ THỐNG
 -- ================================================================= --
 local CONFIG = {
     FarmOffset = Vector3.new(0, 30, 0),
@@ -15,7 +16,7 @@ local CONFIG = {
     AutoEquip = true,
     NoAnimation = true,
     AutoQuest = true,
-    QuestCooldown = 3.0,
+    QuestCooldown = 2.5,
     AutoHaki = true,
     AttackDelay = 0.08,
 
@@ -125,7 +126,6 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 3, MinLv = 2450,MaxLv = 2550,QuestName = "CandyQuest",     QuestLevel = 2, MobName = "Candy Rebel",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1420, 15, -14550) },
 }
 
-local LocalPlayer = Players.LocalPlayer
 local IsFarming = false
 local ActiveTween: Tween? = nil
 local NoclipConn: RBXScriptConnection? = nil
@@ -280,7 +280,6 @@ end
 local function HookNoAnim(char: Model)
     local hum = char:WaitForChild("Humanoid", 5) :: Humanoid?
     if not hum then return end
-
     local animator = hum:WaitForChild("Animator", 5) :: Animator?
     if not animator then return end
 
@@ -300,42 +299,37 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- HÀM AUTO CLICK / FAST ATTACK
+-- LUỒNG AUTO CLICK / FAST ATTACK ĐỘC LẬP (KHÔNG CHIẾM CHUỘT THẬT)
 -- ================================================================= --
-local function ExecuteAutoClick()
-    local char = LocalPlayer.Character
-    if not char then return end
-
-    EnableHaki()
-
-    if CONFIG.AutoEquip then
-        local tool = char:FindFirstChildOfClass("Tool")
-        if not tool then
-            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-            if backpack then
-                tool = backpack:FindFirstChildOfClass("Tool")
-                if tool then tool.Parent = char end
-            end
-        end
-    end
-
-    local currentTool = char:FindFirstChildOfClass("Tool")
-    if currentTool then
-        currentTool:Activate()
-    end
-
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-
-    if RegisterAttack then
-        pcall(function() RegisterAttack:FireServer(0) end)
-    end
-end
-
 task.spawn(function()
     while true do
         if IsFarming then
-            ExecuteAutoClick()
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char then
+                    EnableHaki()
+
+                    if CONFIG.AutoEquip then
+                        local tool = char:FindFirstChildOfClass("Tool")
+                        if not tool then
+                            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+                            if backpack then
+                                tool = backpack:FindFirstChildOfClass("Tool")
+                                if tool then tool.Parent = char end
+                            end
+                        end
+                    end
+
+                    local currentTool = char:FindFirstChildOfClass("Tool")
+                    if currentTool then
+                        currentTool:Activate()
+                    end
+
+                    if RegisterAttack then
+                        RegisterAttack:FireServer(0)
+                    end
+                end
+            end)
             ApplyPlayerHitbox()
         end
         task.wait(CONFIG.AttackDelay)
@@ -401,7 +395,7 @@ local function GetTargetEnemy(): Model?
 end
 
 -- ================================================================= --
--- GUI SETUP & MINIMIZE / MAXIMIZE FEATURE
+-- GIAO DIỆN (UI)
 -- ================================================================= --
 local function GetGuiParent(): Instance
     local success, result = pcall(function() return game:GetService("CoreGui") end)
@@ -446,7 +440,6 @@ TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = MainFrame
 
--- Nút Thu Nhỏ / Phóng To (-) (+)
 local MinimizeBtn = Instance.new("TextButton")
 MinimizeBtn.Size = UDim2.new(0, 26, 0, 26)
 MinimizeBtn.Position = UDim2.new(1, -32, 0, 5)
@@ -461,12 +454,10 @@ local MinBtnCorner = Instance.new("UICorner")
 MinBtnCorner.CornerRadius = UDim.new(0, 4)
 MinBtnCorner.Parent = MinimizeBtn
 
--- Container chứa các thành phần bên trong để ẩn/hiện khi thu nhỏ
 local Container = Instance.new("Folder")
 Container.Name = "UIContainer"
 Container.Parent = MainFrame
 
--- NÚT AUTO FARM
 local FarmBtn = Instance.new("TextButton")
 FarmBtn.Size = UDim2.new(0.85, 0, 0, 38)
 FarmBtn.Position = UDim2.new(0.075, 0, 0, 40)
@@ -481,7 +472,6 @@ local FarmBtnCorner = Instance.new("UICorner")
 FarmBtnCorner.CornerRadius = UDim.new(0, 6)
 FarmBtnCorner.Parent = FarmBtn
 
--- NÚT AUTO HAKI
 local HakiBtn = Instance.new("TextButton")
 HakiBtn.Size = UDim2.new(0.85, 0, 0, 38)
 HakiBtn.Position = UDim2.new(0.075, 0, 0, 86)
@@ -507,7 +497,6 @@ InfoLabel.Font = Enum.Font.GothamMedium
 InfoLabel.TextWrapped = true
 InfoLabel.Parent = Container
 
--- Logic Thu nhỏ / Phóng to Menu
 local isMinimized = false
 MinimizeBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
@@ -527,7 +516,6 @@ MinimizeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Kéo thả Menu linh hoạt
 local dragging, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -627,11 +615,9 @@ local function StartFarm()
     end)
 end
 
-local function ToggleFarm()
+FarmBtn.MouseButton1Click:Connect(function()
     if IsFarming then StopFarm() else StartFarm() end
-end
-
-FarmBtn.MouseButton1Click:Connect(ToggleFarm)
+end)
 
 HakiBtn.MouseButton1Click:Connect(function()
     CONFIG.AutoHaki = not CONFIG.AutoHaki
