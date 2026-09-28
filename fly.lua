@@ -300,9 +300,47 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- HÀM AUTO CLICK / FAST ATTACK (Ép buộc chọn tool số 1)
+-- HÀM KIỂM TRA ĐANG MỞ GIAO DIỆN GAME (CHẶN CLICK KHI MỞ SHOP/MENU)
+-- ================================================================= --
+local function IsGameGuiOpen(): boolean
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return false end
+
+    local guiNamesToCheck = {
+        "Shop",
+        "Menu",
+        "SafeZone",
+        "FruitsShop",
+        "Stats",
+        "Codes",
+        "Settings",
+        "Bounty",
+        "RaceAwakening"
+    }
+
+    for _, guiName in ipairs(guiNamesToCheck) do
+        local guiObj = playerGui:FindFirstChild(guiName, true)
+        if guiObj and guiObj:IsA("GuiObject") then
+            if guiObj.Visible and guiObj.AbsoluteSize.X > 50 and guiObj.AbsoluteSize.Y > 50 then
+                -- Đảm bảo không bắt nhầm Hub của chính script
+                local parentGui = ScreenGui
+                if parentGui and not guiObj:IsDescendantOf(parentGui) then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+-- ================================================================= --
+-- HÀM AUTO CLICK / FAST ATTACK (ĐÃ TÍCH HỢP CHẶN CLICK VÀO GUI GAME)
 -- ================================================================= --
 local function ExecuteAutoClick()
+    -- Nếu đang mở giao diện game (Shop, Menu,...) thì bỏ qua lượt click
+    if IsGameGuiOpen() then return end
+
     local char = LocalPlayer.Character
     if not char then return end
 
@@ -437,7 +475,7 @@ local ParentGui = GetGuiParent()
 local OldGui = ParentGui:FindFirstChild("BloxFruitsFullHub")
 if OldGui then OldGui:Destroy() end
 
-local ScreenGui = Instance.new("ScreenGui")
+ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BloxFruitsFullHub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = ParentGui
