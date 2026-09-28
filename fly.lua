@@ -10,18 +10,18 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 -- CẤU HÌNH AUTO FARM, AUTO CLICK & HITBOX
 -- ================================================================= --
 local CONFIG = {
-    FarmOffset = Vector3.new(0, 25, 0), -- Hạ thấp khoảng cách farm nhẹ để đánh mượt hơn và không bị bay quá cao
-    TweenSpeed = 150,                  -- Tăng tốc độ bay (Tween) để tối ưu hóa thời gian di chuyển
+    FarmOffset = Vector3.new(0, 30, 0),
+    TweenSpeed = 95,
     AutoEquip = true,
     NoAnimation = true,
     AutoQuest = true,
-    QuestCooldown = 2.5,
+    QuestCooldown = 3.0,
     AutoHaki = true,
-    AttackDelay = 0.04,                -- Tăng tốc độ click (Fast Attack) nhanh hơn
+    AttackDelay = 0.08,
 
     AutoHitbox = true,
-    HitboxSize = Vector3.new(65, 65, 65),
-    HitboxTransparency = 0.85,
+    HitboxSize = Vector3.new(60, 60, 60),
+    HitboxTransparency = 0.8,
 }
 
 type QuestData = {
@@ -300,23 +300,9 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- HÀM AUTO CLICK / FAST ATTACK (Ép buộc chọn tool số 1 & Chống kẹt menu)
+-- HÀM AUTO CLICK / FAST ATTACK (Ép buộc chọn tool số 1)
 -- ================================================================= --
-local function IsGameMenuOpen(): boolean
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        -- Kiểm tra nếu các bảng menu/cửa hàng của game đang hiển thị thì tạm dừng auto click
-        local menuCheck = playerGui:FindFirstChild("Menu") or playerGui:FindFirstChild("Shop")
-        if menuCheck and menuCheck:IsA("GuiObject") and menuCheck.Visible then
-            return true
-        end
-    end
-    return false
-end
-
 local function ExecuteAutoClick()
-    if IsGameMenuOpen() then return end -- Nếu đang mở menu hệ thống thì không click, tránh phá giao diện
-    
     local char = LocalPlayer.Character
     if not char then return end
 
@@ -325,7 +311,6 @@ local function ExecuteAutoClick()
     local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
     local currentTool = char:FindFirstChildOfClass("Tool")
 
-    -- Ép buộc tự động lấy tool ở vị trí slot 1 lên tay nếu chưa cầm
     if not currentTool and backpack then
         local tools = {}
         for _, item in ipairs(backpack:GetChildren()) do
@@ -633,11 +618,10 @@ local function StartFarm()
                         if dist > 10 then task.wait(tweenTime) end
 
                         while IsFarming and targetHum.Health > 0 and target.Parent do
-                            -- Giữ chặt vị trí trên đầu quái, tránh bị rớt xuống đất
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
-                            task.wait(0.04)
+                            task.wait(0.05)
                         end
-                        task.wait(0.05)
+                        task.wait(0.1)
                     end
                 else
                     InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tìm quái: " .. qInfo.MobName
@@ -655,7 +639,7 @@ local function StartFarm()
                     end
                 end
             end
-            task.wait(0.05)
+            task.wait(0.1)
         end
         StopFarm()
     end)
