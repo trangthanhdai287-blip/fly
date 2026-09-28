@@ -1,42 +1,27 @@
 --!strict
--- ================================================================= --
--- BLOX FRUITS - FULL SCRIPT A TO Z (FAST ATTACK CHUẨN HUB LỚN)
--- ================================================================= --
-
-if not game:IsLoaded() then
-    game.Loaded:Wait()
-end
-
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
-
-local LocalPlayer = Players.LocalPlayer
-
--- Chống AFK
-LocalPlayer.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-end)
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH CONFIG TOÀN DIỆN
+-- CẤU HÌNH AUTO FARM, AUTO CLICK & HITBOX
 -- ================================================================= --
-getgenv().CONFIG = {
-    AutoFarm = false,
-    AutoQuest = true,
+local CONFIG = {
+    FarmOffset = Vector3.new(0, 30, 0),
+    TweenSpeed = 95,
     AutoEquip = true,
-    AutoHaki = true,
     NoAnimation = true,
+    AutoQuest = true,
+    QuestCooldown = 3.0,
+    AutoHaki = true,
+    AttackDelay = 0.08,
+
     AutoHitbox = true,
-    HitboxSize = 60,
-    FarmOffset = Vector3.new(0, 25, 0),
-    TweenSpeed = 350,
-    AttackDelay = 0.01,
+    HitboxSize = Vector3.new(60, 60, 60),
+    HitboxTransparency = 0.8,
 }
 
 type QuestData = {
@@ -58,9 +43,6 @@ local function GetCurrentSea(): number
     return 1
 end
 
--- ================================================================= --
--- DATABASE NHIỆM VỤ (SEA 1, 2, 3)
--- ================================================================= --
 local QUEST_DATABASE: {QuestData} = {
     -- SEA 1
     { Sea = 1, MinLv = 1,   MaxLv = 9,   QuestName = "BanditQuest1",  QuestLevel = 1, MobName = "Bandit",               NpcPos = Vector3.new(1059, 16, 1549),   MobPos = Vector3.new(1145, 17, 1634) },
@@ -143,23 +125,29 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 3, MinLv = 2450,MaxLv = 2550,QuestName = "CandyQuest",     QuestLevel = 2, MobName = "Candy Rebel",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1420, 15, -14550) },
 }
 
+local LocalPlayer = Players.LocalPlayer
+local IsFarming = false
+local ActiveTween: Tween? = nil
+local NoclipConn: RBXScriptConnection? = nil
+local BodyVel: BodyVelocity? = nil
+local LastQuestAttempt = 0
+
+local RegisterAttack = ReplicatedStorage:FindFirstChild("RegisterAttack", true) :: RemoteEvent?
 local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
 local function EnableHaki()
     if not CONFIG.AutoHaki then return end
     local char = LocalPlayer.Character
     if char and not char:FindFirstChild("HasBuso") then
-        if CommF then
-            pcall(function() CommF:InvokeServer("Buso") end)
-        end
+        if CommF then pcall(function() CommF:InvokeServer("Buso") end) end
     end
 end
 
 local function GetPlayerLevel(): number
     local data = LocalPlayer:FindFirstChild("Data")
     if data then
-        local lv = data:FindFirstChild("Level") :: IntValue?
-        if lv then return lv.Value end
+        local levelVal = data:FindFirstChild("Level") :: IntValue?
+        if levelVal then return levelVal.Value end
     end
     return 1
 end
@@ -167,50 +155,154 @@ end
 local function GetCurrentQuestInfo(): QuestData
     local myLevel = GetPlayerLevel()
     local currentSea = GetCurrentSea()
-    local matched: QuestData? = nil
-    local lastOfSea: QuestData? = nil
+    local matchedQuest: QuestData? = nil
+    local lastQuestOfSea: QuestData? = nil
 
-    for _, q in ipairs(QUEST_DATABASE) do
-        if q.Sea == currentSea then
-            lastOfSea = q
-            if myLevel >= q.MinLv and myLevel <= q.MaxLv then
-                matched = q
+    for _, qData in ipairs(QUEST_DATABASE) do
+        if qData.Sea == currentSea then
+            lastQuestOfSea = qData
+            if myLevel >= qData.MinLv and myLevel <= qData.MaxLv then
+                matchedQuest = qData
                 break
             end
         end
     end
-    return matched or lastOfSea or QUEST_DATABASE[1]
+
+    if matchedQuest then return matchedQuest end
+    if lastQuestOfSea then return lastQuestOfSea end
+    return QUEST_DATABASE[1]
 end
 
 local function HasActiveQuest(): boolean
-    local pg = LocalPlayer:FindFirstChild("PlayerGui")
-    if not pg then return false end
-    local tf = pg:FindFirstChild("TrackedQuestFrame", true)
-    if tf then
-        local f = tf:FindFirstChild("Frame") :: GuiObject?
-        if f and f.Visible then
-            local p = f:FindFirstChild("progress", true) :: TextLabel?
-            if p and p.Text ~= "" and p.Text ~= "0" then return true end
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return false end
+
+    local trackedFrame = playerGui:FindFirstChild("TrackedQuestFrame", true)
+    if trackedFrame then
+        if trackedFrame:IsA("GuiObject") and not trackedFrame.Visible then return false end
+        local frame = trackedFrame:FindFirstChild("Frame") :: GuiObject?
+        if frame then
+            if not frame.Visible then return false end
+            local progressLabel = frame:FindFirstChild("progress", true) :: TextLabel?
+            local headerLabel = frame:FindFirstChild("header", true) :: TextLabel?
+
+            if progressLabel and progressLabel.Text ~= "" and progressLabel.Text ~= "0" then return true end
+            if headerLabel and headerLabel.Text ~= "" then return true end
         end
     end
     return false
 end
 
--- ================================================================= --
--- FAST ATTACK CHUYÊN SÂU CHUẨN HUB LỚN
--- ================================================================= --
-local CombatFramework = nil
-local CombatFrameworkR = nil
-local LocalC = nil
+local function TakeQuest(): boolean
+    if not CONFIG.AutoQuest or HasActiveQuest() then return true end
+    if os.clock() - LastQuestAttempt < CONFIG.QuestCooldown then return false end
 
-pcall(function()
-    CombatFramework = require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("CombatFramework"))
-    CombatFrameworkR = getupvalues(CombatFramework)
-    LocalC = CombatFrameworkR[2]
-end)
+    LastQuestAttempt = os.clock()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+    if not hrp then return false end
 
-local function ExecuteFastAttack()
-    if not CONFIG.AutoFarm then return end
+    local qInfo = GetCurrentQuestInfo()
+    local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
+    local distToNpc = (qInfo.NpcPos - hrp.Position).Magnitude
+
+    if distToNpc > 10 then
+        local tweenTime = math.max(0.1, distToNpc / CONFIG.TweenSpeed)
+        if ActiveTween then ActiveTween:Cancel() end
+
+        ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+            CFrame = targetNpcCFrame
+        })
+        ActiveTween:Play()
+
+        local checkInterval = 0.1
+        for _ = 1, math.floor(tweenTime / checkInterval) do
+            if HasActiveQuest() then
+                if ActiveTween then ActiveTween:Cancel() end
+                return true
+            end
+            task.wait(checkInterval)
+        end
+    end
+
+    if HasActiveQuest() then return true end
+
+    local startWait = os.clock()
+    while os.clock() - startWait < 0.2 do
+        hrp.CFrame = targetNpcCFrame
+        task.wait(0.05)
+    end
+
+    if CommF then
+        pcall(function()
+            CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
+        end)
+    end
+
+    task.wait(0.5)
+    return HasActiveQuest()
+end
+
+local function ApplyHitbox(enemy: Model)
+    if not CONFIG.AutoHitbox then return end
+    for _, part in ipairs(enemy:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if part.Name == "HumanoidRootPart" or part.Name == "Head" then
+                part.Size = CONFIG.HitboxSize
+                part.Transparency = CONFIG.HitboxTransparency
+                part.CanCollide = false
+            end
+        end
+    end
+end
+
+local function ApplyPlayerHitbox()
+    if not CONFIG.AutoHitbox then return end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+            local head = player.Character:FindFirstChild("Head") :: BasePart?
+
+            if hrp then
+                hrp.Size = CONFIG.HitboxSize
+                hrp.Transparency = CONFIG.HitboxTransparency
+                hrp.CanCollide = false
+            end
+            if head then
+                head.Size = CONFIG.HitboxSize
+                head.Transparency = CONFIG.HitboxTransparency
+                head.CanCollide = false
+            end
+        end
+    end
+end
+
+local function HookNoAnim(char: Model)
+    local hum = char:WaitForChild("Humanoid", 5) :: Humanoid?
+    if not hum then return end
+
+    local animator = hum:WaitForChild("Animator", 5) :: Animator?
+    if not animator then return end
+
+    animator.AnimationPlayed:Connect(function(track)
+        if CONFIG.NoAnimation then
+            if track.AnimationPriority == Enum.AnimationPriority.Action
+                or track.AnimationPriority == Enum.AnimationPriority.Action2
+                or track.AnimationPriority == Enum.AnimationPriority.Action3
+                or track.AnimationPriority == Enum.AnimationPriority.Action4 then
+                track:Stop(0)
+            end
+        end
+    end)
+end
+
+if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(HookNoAnim)
+
+-- ================================================================= --
+-- HÀM AUTO CLICK / FAST ATTACK
+-- ================================================================= --
+local function ExecuteAutoClick()
     local char = LocalPlayer.Character
     if not char then return end
 
@@ -219,46 +311,36 @@ local function ExecuteFastAttack()
     if CONFIG.AutoEquip then
         local tool = char:FindFirstChildOfClass("Tool")
         if not tool then
-            local bp = LocalPlayer:FindFirstChildOfClass("Backpack")
-            if bp then
-                for _, item in ipairs(bp:GetChildren()) do
-                    if item:IsA("Tool") and (item.ToolTip == "Blox Fruit" or item.ToolTip == "Melee" or item.ToolTip == "Sword") then
-                        item.Parent = char
-                        break
-                    end
-                end
+            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+            if backpack then
+                tool = backpack:FindFirstChildOfClass("Tool")
+                if tool then tool.Parent = char end
             end
         end
     end
-
-    -- Ép đòn đánh qua CombatFramework (Bí quyết giúp click "bén" như Redz/W-Azure)
-    pcall(function()
-        if LocalC and LocalC.activeController then
-            LocalC.activeController.hitboxMagnitude = CONFIG.HitboxSize
-            LocalC.activeController:attack()
-        end
-    end)
 
     local currentTool = char:FindFirstChildOfClass("Tool")
     if currentTool then
         currentTool:Activate()
     end
+
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+
+    if RegisterAttack then
+        pcall(function() RegisterAttack:FireServer(0) end)
+    end
 end
 
 task.spawn(function()
     while true do
-        if CONFIG.AutoFarm then
-            pcall(ExecuteFastAttack)
+        if IsFarming then
+            ExecuteAutoClick()
+            ApplyPlayerHitbox()
         end
         task.wait(CONFIG.AttackDelay)
     end
 end)
-
--- ================================================================= --
--- XỬ LÝ HITBOX & NOCLIP
--- ================================================================= --
-local BodyVel: BodyVelocity? = nil
-local NoclipConn: RBXScriptConnection? = nil
 
 local function EnablePhysics(hrp: BasePart)
     if not BodyVel or BodyVel.Parent ~= hrp then
@@ -286,38 +368,31 @@ local function DisablePhysics()
     if NoclipConn then NoclipConn:Disconnect() NoclipConn = nil end
 end
 
-local function ApplyHitbox(enemy: Model)
-    if not CONFIG.AutoHitbox then return end
-    for _, part in ipairs(enemy:GetDescendants()) do
-        if part:IsA("BasePart") and (part.Name == "HumanoidRootPart" or part.Name == "Head") then
-            part.Size = Vector3.new(CONFIG.HitboxSize, CONFIG.HitboxSize, CONFIG.HitboxSize)
-            part.Transparency = 0.8
-            part.CanCollide = false
-        end
-    end
-end
-
 local function GetTargetEnemy(): Model?
     local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-    local folder = workspace:FindFirstChild("Enemies")
-    if not hrp or not folder then return nil end
+    local myHrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart
+    local enemyFolder = workspace:FindFirstChild("Enemies")
+
+    if not myHrp or not enemyFolder then return nil end
 
     local qInfo = GetCurrentQuestInfo()
-    local targetMob = qInfo.MobName
+    local targetMobName = qInfo.MobName
     local closest: Model? = nil
     local minDist = math.huge
 
-    for _, enemy in ipairs(folder:GetChildren()) do
-        if enemy:IsA("Model") and (targetMob == "" or string.find(enemy.Name, targetMob)) then
-            local hum = enemy:FindFirstChildOfClass("Humanoid")
-            local eHrp = enemy:FindFirstChild("HumanoidRootPart") :: BasePart?
-            if hum and eHrp and hum.Health > 0 then
-                ApplyHitbox(enemy)
-                local dist = (eHrp.Position - hrp.Position).Magnitude
-                if dist < minDist then
-                    minDist = dist
-                    closest = enemy
+    for _, enemy in ipairs(enemyFolder:GetChildren()) do
+        if enemy:IsA("Model") then
+            if targetMobName == "" or string.find(enemy.Name, targetMobName) then
+                local hum = enemy:FindFirstChildOfClass("Humanoid")
+                local hrp = enemy:FindFirstChild("HumanoidRootPart") :: BasePart
+
+                if hum and hrp and hum.Health > 0 then
+                    ApplyHitbox(enemy)
+                    local dist = (hrp.Position - myHrp.Position).Magnitude
+                    if dist < minDist then
+                        minDist = dist
+                        closest = enemy
+                    end
                 end
             end
         end
@@ -326,125 +401,246 @@ local function GetTargetEnemy(): Model?
 end
 
 -- ================================================================= --
--- VÒNG LẶP AUTO FARM CHÍNH
+-- GUI SETUP & MINIMIZE / MAXIMIZE FEATURE
 -- ================================================================= --
-local ActiveTween: Tween? = nil
+local function GetGuiParent(): Instance
+    local success, result = pcall(function() return game:GetService("CoreGui") end)
+    if success and result then return result end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
 
-task.spawn(function()
-    while true do
-        if CONFIG.AutoFarm then
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
+local ParentGui = GetGuiParent()
+local OldGui = ParentGui:FindFirstChild("BloxFruitsFullHub")
+if OldGui then OldGui:Destroy() end
 
-            if hrp and hum and hum.Health > 0 then
-                EnablePhysics(hrp)
-                EnableHaki()
-
-                local qInfo = GetCurrentQuestInfo()
-
-                -- Nhận nhiệm vụ nếu chưa có
-                if CONFIG.AutoQuest and not HasActiveQuest() then
-                    local npcPos = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
-                    hrp.CFrame = npcPos
-                    task.wait(0.3)
-                    if CommF then
-                        pcall(function() CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel) end)
-                    end
-                    task.wait(0.5)
-                end
-
-                local target = GetTargetEnemy()
-                if target then
-                    local tHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart?
-                    local tHum = target:FindFirstChildOfClass("Humanoid")
-
-                    if tHrp and tHum and tHum.Health > 0 then
-                        while CONFIG.AutoFarm and tHum.Health > 0 and target.Parent do
-                            hrp.CFrame = CFrame.lookAt(tHrp.Position + CONFIG.FarmOffset, tHrp.Position)
-                            task.wait(0.05)
-                        end
-                    end
-                else
-                    -- Bay về chỗ spawn quái nếu không tìm thấy mục tiêu
-                    local spawnPos = CFrame.new(qInfo.MobPos + CONFIG.FarmOffset)
-                    hrp.CFrame = spawnPos
-                end
-            end
-        else
-            DisablePhysics()
-        end
-        task.wait(0.1)
-    end
-end)
-
--- ================================================================= --
--- GIAO DIỆN UI HIỆN ĐẠI
--- ================================================================= --
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "FullAZHub"
+ScreenGui.Name = "BloxFruitsFullHub"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = game:GetService("CoreGui")
+ScreenGui.Parent = ParentGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 420, 0, 240)
-MainFrame.Position = UDim2.new(0.5, -210, 0.5, -120)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+MainFrame.Size = UDim2.new(0, 270, 0, 185)
+MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
-MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 8)
 MainCorner.Parent = MainFrame
 
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
-Title.Text = "⚡ BLOX FRUITS - FULL FAST ATTACK HUB"
-Title.TextColor3 = Color3.fromRGB(0, 220, 255)
-Title.TextSize = 13
-Title.Font = Enum.Font.GothamBold
-Title.Parent = MainFrame
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(0, 200, 255)
+MainStroke.Thickness = 1.5
+MainStroke.Parent = MainFrame
 
-local TitleCorner = Instance.new("UICorner")
-TitleCorner.CornerRadius = UDim.new(0, 8)
-TitleCorner.Parent = Title
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -40, 0, 35)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "⚡ AUTO FARM HUB"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextSize = 11
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = MainFrame
 
-local ToggleFarmBtn = Instance.new("TextButton")
-ToggleFarmBtn.Size = UDim2.new(0, 380, 0, 45)
-ToggleFarmBtn.Position = UDim2.new(0, 20, 0, 60)
-ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-ToggleFarmBtn.Text = "Auto Farm Level: OFF"
-ToggleFarmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleFarmBtn.TextSize = 14
-ToggleFarmBtn.Font = Enum.Font.GothamBold
-ToggleFarmBtn.Parent = MainFrame
+-- Nút Thu Nhỏ / Phóng To (-) (+)
+local MinimizeBtn = Instance.new("TextButton")
+MinimizeBtn.Size = UDim2.new(0, 26, 0, 26)
+MinimizeBtn.Position = UDim2.new(1, -32, 0, 5)
+MinimizeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+MinimizeBtn.Text = "-"
+MinimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeBtn.TextSize = 14
+MinimizeBtn.Font = Enum.Font.GothamBold
+MinimizeBtn.Parent = MainFrame
 
-local BtnCorner = Instance.new("UICorner")
-BtnCorner.CornerRadius = UDim.new(0, 6)
-BtnCorner.Parent = ToggleFarmBtn
+local MinBtnCorner = Instance.new("UICorner")
+MinBtnCorner.CornerRadius = UDim.new(0, 4)
+MinBtnCorner.Parent = MinimizeBtn
 
-ToggleFarmBtn.MouseButton1Click:Connect(function()
-    CONFIG.AutoFarm = not CONFIG.AutoFarm
-    if CONFIG.AutoFarm then
-        ToggleFarmBtn.Text = "Auto Farm Level: ON"
-        ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+-- Container chứa các thành phần bên trong để ẩn/hiện khi thu nhỏ
+local Container = Instance.new("Folder")
+Container.Name = "UIContainer"
+Container.Parent = MainFrame
+
+-- NÚT AUTO FARM
+local FarmBtn = Instance.new("TextButton")
+FarmBtn.Size = UDim2.new(0.85, 0, 0, 38)
+FarmBtn.Position = UDim2.new(0.075, 0, 0, 40)
+FarmBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+FarmBtn.Text = "AUTO FARM: OFF"
+FarmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FarmBtn.TextSize = 12
+FarmBtn.Font = Enum.Font.GothamBold
+FarmBtn.Parent = Container
+
+local FarmBtnCorner = Instance.new("UICorner")
+FarmBtnCorner.CornerRadius = UDim.new(0, 6)
+FarmBtnCorner.Parent = FarmBtn
+
+-- NÚT AUTO HAKI
+local HakiBtn = Instance.new("TextButton")
+HakiBtn.Size = UDim2.new(0.85, 0, 0, 38)
+HakiBtn.Position = UDim2.new(0.075, 0, 0, 86)
+HakiBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+HakiBtn.Text = "AUTO HAKI: ON"
+HakiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HakiBtn.TextSize = 12
+HakiBtn.Font = Enum.Font.GothamBold
+HakiBtn.Parent = Container
+
+local HakiBtnCorner = Instance.new("UICorner")
+HakiBtnCorner.CornerRadius = UDim.new(0, 6)
+HakiBtnCorner.Parent = HakiBtn
+
+local InfoLabel = Instance.new("TextLabel")
+InfoLabel.Size = UDim2.new(1, -20, 0, 45)
+InfoLabel.Position = UDim2.new(0, 10, 0, 132)
+InfoLabel.BackgroundTransparency = 1
+InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel() .. " | Ready"
+InfoLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
+InfoLabel.TextSize = 11
+InfoLabel.Font = Enum.Font.GothamMedium
+InfoLabel.TextWrapped = true
+InfoLabel.Parent = Container
+
+-- Logic Thu nhỏ / Phóng to Menu
+local isMinimized = false
+MinimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        MinimizeBtn.Text = "+"
+        MainFrame:TweenSize(UDim2.new(0, 270, 0, 35), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
+        for _, child in ipairs(Container:GetChildren()) do
+            if child:IsA("GuiObject") then child.Visible = false end
+        end
     else
-        ToggleFarmBtn.Text = "Auto Farm Level: OFF"
-        ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        MinimizeBtn.Text = "-"
+        MainFrame:TweenSize(UDim2.new(0, 270, 0, 185), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
+        task.wait(0.1)
+        for _, child in ipairs(Container:GetChildren()) do
+            if child:IsA("GuiObject") then child.Visible = true end
+        end
     end
 end)
 
-local InfoStatus = Instance.new("TextLabel")
-InfoStatus.Size = UDim2.new(1, -40, 0, 30)
-InfoStatus.Position = UDim2.new(0, 20, 0, 130)
-InfoStatus.BackgroundTransparency = 1
-InfoStatus.Text = "Trạng thái: Sẵn sàng | Sea: " .. GetCurrentSea() .. " | Level: " .. GetPlayerLevel()
-InfoStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
-InfoStatus.TextSize = 12
-InfoStatus.Font = Enum.Font.GothamMedium
-InfoStatus.TextXAlignment = Enum.TextXAlignment.Left
-InfoStatus.Parent = MainFrame
+-- Kéo thả Menu linh hoạt
+local dragging, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+    end
+end)
 
-print("Full Script A-Z Loaded Successfully!")
+MainFrame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+local function StopFarm()
+    IsFarming = false
+    if ActiveTween then ActiveTween:Cancel() ActiveTween = nil end
+    DisablePhysics()
+    FarmBtn.Text = "AUTO FARM: OFF"
+    FarmBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+end
+
+local function StartFarm()
+    if IsFarming then return end
+    IsFarming = true
+    FarmBtn.Text = "AUTO FARM: ON"
+    FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+
+    task.spawn(function()
+        while IsFarming do
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+            if hrp and hum and hum.Health > 0 then
+                EnablePhysics(hrp)
+
+                local qInfo = GetCurrentQuestInfo()
+
+                if CONFIG.AutoQuest and not HasActiveQuest() then
+                    InfoLabel.Text = "Đang đi nhận Quest..."
+                    TakeQuest()
+                end
+
+                local target = GetTargetEnemy()
+                if target then
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Farm: " .. qInfo.MobName
+                    local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart
+                    local targetHum = target:FindFirstChildOfClass("Humanoid")
+
+                    if targetHrp and targetHum and targetHum.Health > 0 then
+                        local targetPos = targetHrp.Position + CONFIG.FarmOffset
+                        local dist = (targetPos - hrp.Position).Magnitude
+                        local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
+
+                        if ActiveTween then ActiveTween:Cancel() end
+                        ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+                            CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
+                        })
+                        ActiveTween:Play()
+
+                        if dist > 10 then task.wait(tweenTime) end
+
+                        while IsFarming and targetHum.Health > 0 and target.Parent do
+                            hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
+                            task.wait(0.05)
+                        end
+                        task.wait(0.1)
+                    end
+                else
+                    InfoLabel.Text = "Sea " .. GetCurrentSea() .. " | Tìm quái: " .. qInfo.MobName
+                    local targetMobPos = qInfo.MobPos + CONFIG.FarmOffset
+                    local distToMobPos = (targetMobPos - hrp.Position).Magnitude
+
+                    if distToMobPos > 15 then
+                        local tweenTime = math.max(0.1, distToMobPos / CONFIG.TweenSpeed)
+                        if ActiveTween then ActiveTween:Cancel() end
+                        ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+                            CFrame = CFrame.new(targetMobPos)
+                        })
+                        ActiveTween:Play()
+                        task.wait(tweenTime)
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+        StopFarm()
+    end)
+end
+
+local function ToggleFarm()
+    if IsFarming then StopFarm() else StartFarm() end
+end
+
+FarmBtn.MouseButton1Click:Connect(ToggleFarm)
+
+HakiBtn.MouseButton1Click:Connect(function()
+    CONFIG.AutoHaki = not CONFIG.AutoHaki
+    if CONFIG.AutoHaki then
+        HakiBtn.Text = "AUTO HAKI: ON"
+        HakiBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+        EnableHaki()
+    else
+        HakiBtn.Text = "AUTO HAKI: OFF"
+        HakiBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+    end
+end)
