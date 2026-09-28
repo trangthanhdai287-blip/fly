@@ -4,11 +4,10 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-
-local LocalPlayer = Players.LocalPlayer
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- ================================================================= --
--- CẤU HÌNH HỆ THỐNG
+-- CẤU HÌNH AUTO FARM, AUTO CLICK & HITBOX
 -- ================================================================= --
 local CONFIG = {
     FarmOffset = Vector3.new(0, 30, 0),
@@ -16,7 +15,7 @@ local CONFIG = {
     AutoEquip = true,
     NoAnimation = true,
     AutoQuest = true,
-    QuestCooldown = 2.5,
+    QuestCooldown = 3.0,
     AutoHaki = true,
     AttackDelay = 0.08,
 
@@ -126,6 +125,7 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 3, MinLv = 2450,MaxLv = 2550,QuestName = "CandyQuest",     QuestLevel = 2, MobName = "Candy Rebel",        NpcPos = Vector3.new(-1150, 15, -14250),MobPos = Vector3.new(-1420, 15, -14550) },
 }
 
+local LocalPlayer = Players.LocalPlayer
 local IsFarming = false
 local ActiveTween: Tween? = nil
 local NoclipConn: RBXScriptConnection? = nil
@@ -280,6 +280,7 @@ end
 local function HookNoAnim(char: Model)
     local hum = char:WaitForChild("Humanoid", 5) :: Humanoid?
     if not hum then return end
+
     local animator = hum:WaitForChild("Animator", 5) :: Animator?
     if not animator then return end
 
@@ -299,37 +300,66 @@ if LocalPlayer.Character then HookNoAnim(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(HookNoAnim)
 
 -- ================================================================= --
--- LUỒNG AUTO CLICK / FAST ATTACK ĐỘC LẬP (KHÔNG CHIẾM CHUỘT THẬT)
+-- HÀM AUTO CLICK / FAST ATTACK (Ép buộc chọn tool số 1)
 -- ================================================================= --
+local function ExecuteAutoClick()
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    EnableHaki()
+
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local currentTool = char:FindFirstChildOfClass("Tool")
+
+    if not currentTool and backpack then
+        local tools = {}
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                table.insert(tools, item)
+            end
+        end
+        
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") then
+                currentTool = item
+                break
+            end
+        end
+
+        if not currentTool and #tools > 0 then
+            local slot1Tool = tools[1]
+            if slot1Tool then
+                slot1Tool.Parent = char
+                currentTool = slot1Tool
+            end
+        end
+    end
+
+    if currentTool then
+        pcall(function()
+            currentTool:Activate()
+        end)
+    end
+
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+
+    if RegisterAttack then
+        pcall(function()
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                RegisterAttack:FireServer(0, hrp.CFrame)
+            else
+                RegisterAttack:FireServer(0)
+            end
+        end)
+    end
+end
+
 task.spawn(function()
     while true do
         if IsFarming then
-            pcall(function()
-                local char = LocalPlayer.Character
-                if char then
-                    EnableHaki()
-
-                    if CONFIG.AutoEquip then
-                        local tool = char:FindFirstChildOfClass("Tool")
-                        if not tool then
-                            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-                            if backpack then
-                                tool = backpack:FindFirstChildOfClass("Tool")
-                                if tool then tool.Parent = char end
-                            end
-                        end
-                    end
-
-                    local currentTool = char:FindFirstChildOfClass("Tool")
-                    if currentTool then
-                        currentTool:Activate()
-                    end
-
-                    if RegisterAttack then
-                        RegisterAttack:FireServer(0)
-                    end
-                end
-            end)
+            ExecuteAutoClick()
             ApplyPlayerHitbox()
         end
         task.wait(CONFIG.AttackDelay)
@@ -395,7 +425,7 @@ local function GetTargetEnemy(): Model?
 end
 
 -- ================================================================= --
--- GIAO DIỆN (UI)
+-- GUI SETUP & MINIMIZE / MAXIMIZE FEATURE
 -- ================================================================= --
 local function GetGuiParent(): Instance
     local success, result = pcall(function() return game:GetService("CoreGui") end)
@@ -615,9 +645,11 @@ local function StartFarm()
     end)
 end
 
-FarmBtn.MouseButton1Click:Connect(function()
+local function ToggleFarm()
     if IsFarming then StopFarm() else StartFarm() end
-end)
+end
+
+FarmBtn.MouseButton1Click:Connect(ToggleFarm)
 
 HakiBtn.MouseButton1Click:Connect(function()
     CONFIG.AutoHaki = not CONFIG.AutoHaki
