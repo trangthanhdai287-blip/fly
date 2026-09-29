@@ -3,7 +3,6 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then return end
@@ -12,7 +11,6 @@ if not LocalPlayer then return end
 -- CẤU HÌNH & BIẾN TOÀN CỤC CHO FAST ATTACK & AUTO FARM
 -- ================================================================= --
 _G.FastAttack = true
-_G.ToggleKey = Enum.KeyCode.End -- Phím End để bật/tắt Fast Attack nhanh
 
 local CONFIG = {
     FarmOffset = Vector3.new(0, 30, 0),
@@ -21,8 +19,6 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
     ClickDelay = 0,
-    HitboxSize = Vector3.new(60, 60, 60),
-    HitboxTransparency = 0.8,
 }
 
 local IsFarming = false
@@ -45,30 +41,6 @@ local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction
 
 local RegisterAttack = SafeWaitForChild(Net, "RE/RegisterAttack")
 local RegisterHit = SafeWaitForChild(Net, "RE/RegisterHit")
-
--- ================================================================= --
--- TẠO MENU TRẠNG THÁI FAST ATTACK (DRAWING API)
--- ================================================================= --
-local StatusText = Drawing.new("Text")
-StatusText.Text = "Fast Attack: [ON]"
-StatusText.Size = 18
-StatusText.Color = Color3.fromRGB(0, 255, 0)
-StatusText.Position = Vector2.new(50, 50)
-StatusText.Outline = true
-StatusText.Visible = true
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == _G.ToggleKey then
-        _G.FastAttack = not _G.FastAttack
-        if _G.FastAttack then
-            StatusText.Text = "Fast Attack: [ON]"
-            StatusText.Color = Color3.fromRGB(0, 255, 0)
-        else
-            StatusText.Text = "Fast Attack: [OFF]"
-            StatusText.Color = Color3.fromRGB(255, 0, 0)
-        end
-    end
-end)
 
 -- ================================================================= --
 -- DATABASE QUEST & TIỆN ÍCH GAME
@@ -161,7 +133,7 @@ local function EnableHaki()
 end
 
 -- ================================================================= --
--- HỆ THỐNG FAST ATTACK (CHUẨN XÁC 100%)
+-- HỆ THỐNG FAST ATTACK CHẠY NGẦM KHÔNG CẦN PHÍM BẬT/TẮT
 -- ================================================================= --
 local FastAttack = { Distance = 100 }
 
@@ -220,7 +192,7 @@ task.spawn(function()
 end)
 
 -- ================================================================= --
--- GIAO DIỆN HUB ĐIỀU KHIỂN CHÍNH (ĐÃ CĂN LẠI DỄ NHÌN)
+-- GIAO DIỆN HUB ĐIỀU KHIỂN CHÍNH
 -- ================================================================= --
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BloxFruitsHubOptimized"
@@ -228,12 +200,12 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game:GetService("CoreGui")
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 260, 0, 150)
+MainFrame.Size = UDim2.new(0, 260, 0, 140)
 MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
-MainFrame.Draggable = true -- Có thể kéo thả bảng đi khắp màn hình
+MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
@@ -266,10 +238,10 @@ FarmBtnCorner.CornerRadius = UDim.new(0, 6)
 FarmBtnCorner.Parent = FarmBtn
 
 local InfoLabel = Instance.new("TextLabel")
-InfoLabel.Size = UDim2.new(1, -20, 0, 45)
-InfoLabel.Position = UDim2.new(0, 10, 0, 95)
+InfoLabel.Size = UDim2.new(1, -20, 0, 35)
+InfoLabel.Position = UDim2.new(0, 10, 0, 92)
 InfoLabel.BackgroundTransparency = 1
-InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel() .. "\n(Nhấn phím [End] để bật/tắt Fast Attack)"
+InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel()
 InfoLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
 InfoLabel.TextSize = 11
 InfoLabel.Font = Enum.Font.GothamMedium
@@ -341,14 +313,6 @@ local function GetTargetEnemy(): Model?
                 local hrp = enemy:FindFirstChild("HumanoidRootPart") :: BasePart
 
                 if hum and hrp and hum.Health > 0 then
-                    for _, part in ipairs(enemy:GetDescendants()) do
-                        if part:IsA("BasePart") and (part.Name == "HumanoidRootPart" or part.Name == "Head") then
-                            part.Size = CONFIG.HitboxSize
-                            part.Transparency = CONFIG.HitboxTransparency
-                            part.CanCollide = false
-                        end
-                    end
-
                     local dist = (hrp.Position - myHrp.Position).Magnitude
                     if dist < minDist then
                         minDist = dist
