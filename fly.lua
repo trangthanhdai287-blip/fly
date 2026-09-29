@@ -14,7 +14,7 @@ _G.FastAttack = true
 
 local CONFIG = {
     FarmOffset = Vector3.new(0, 30, 0),
-    TweenSpeed = 95,
+    TweenSpeed = 95,          -- Tốc độ bay (Studs/s)
     AutoQuest = true,
     QuestCooldown = 3.0,
     AutoHaki = true,
@@ -38,7 +38,6 @@ local Net = SafeWaitForChild(SafeWaitForChild(ReplicatedStorage, "Modules"), "Ne
 local EnemiesFolder = SafeWaitForChild(workspace, "Enemies")
 local CharactersFolder = SafeWaitForChild(workspace, "Characters")
 
--- Hàm tìm CommF_ chuẩn xác và an toàn nhất
 local function GetCommF(): RemoteFunction?
     local rem = ReplicatedStorage:FindFirstChild("CommF_")
     if not rem then
@@ -51,7 +50,7 @@ local RegisterAttack = SafeWaitForChild(Net, "RE/RegisterAttack")
 local RegisterHit = SafeWaitForChild(Net, "RE/RegisterHit")
 
 -- ================================================================= --
--- DATABASE QUEST & TIỆN ÍCH GAME (ĐÃ MỞ RỘNG SEA 1, 2, 3)
+-- DATABASE QUEST & TIỆN ÍCH GAME (SEA 1, 2, 3)
 -- ================================================================= --
 type QuestData = {
     Sea: number, MinLv: number, MaxLv: number,
@@ -176,6 +175,23 @@ local function GetCurrentQuestInfo(): QuestData
     return matchedQuest or lastQuestOfSea or QUEST_DATABASE[1]
 end
 
+local function GetActiveQuestName(): string?
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil end
+    
+    local trackedFrame = playerGui:FindFirstChild("TrackedQuestFrame", true)
+    if trackedFrame then
+        local frame = trackedFrame:FindFirstChild("Frame") :: GuiObject?
+        if frame and frame.Visible then
+            local headerLabel = frame:FindFirstChild("header", true) :: TextLabel?
+            if headerLabel then
+                return headerLabel.Text
+            end
+        end
+    end
+    return nil
+end
+
 local function HasActiveQuest(): boolean
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return false end
@@ -187,13 +203,19 @@ local function HasActiveQuest(): boolean
         if frame then
             if not frame.Visible then return false end
             local progressLabel = frame:FindFirstChild("progress", true) :: TextLabel?
-            local headerLabel = frame:FindFirstChild("header", true) :: TextLabel?
-
             if progressLabel and progressLabel.Text ~= "" and progressLabel.Text ~= "0" then return true end
-            if headerLabel and headerLabel.Text ~= "" then return true end
         end
     end
     return false
+end
+
+local function AbandonCurrentQuest()
+    local CommF = GetCommF()
+    if CommF then
+        pcall(function()
+            CommF:InvokeServer("AbandonQuest")
+        end)
+    end
 end
 
 local function EnableHaki()
@@ -206,7 +228,7 @@ local function EnableHaki()
 end
 
 -- ================================================================= --
--- HỆ THỐNG FAST ATTACK CHẠY NGẦM
+-- FAST ATTACK
 -- ================================================================= --
 local FastAttack = { Distance = 100 }
 
@@ -265,7 +287,7 @@ task.spawn(function()
 end)
 
 -- ================================================================= --
--- GIAO DIỆN HUB ĐIỀU KHIỂN CHÍNH
+-- UI HUB
 -- ================================================================= --
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BloxFruitsHubOptimized"
@@ -321,7 +343,6 @@ InfoLabel.Font = Enum.Font.GothamMedium
 InfoLabel.TextWrapped = true
 InfoLabel.Parent = MainFrame
 
--- Cập nhật thông tin Sea & Level liên tục lên UI
 task.spawn(function()
     while true do
         InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel()
@@ -330,7 +351,7 @@ task.spawn(function()
 end)
 
 -- ================================================================= --
--- LUỒNG AUTO FARM & QUEST CHÍNH
+-- LUỒNG TWEEN & XỬ LÝ QUEST (TỰ HỦY QUEST CŨ NẾU LỆCH LEVEL)
 -- ================================================================= --
 local function EnablePhysics(hrp: BasePart)
     if not BodyVel or BodyVel.Parent ~= hrp then
@@ -358,23 +379,37 @@ local function DisablePhysics()
 end
 
 local function TakeQuest()
-    if not CONFIG.AutoQuest or HasActiveQuest() then return end
+    if not CONFIG.AutoQuest then return end
     if os.clock() - LastQuestAttempt < CONFIG.QuestCooldown then return end
     LastQuestAttempt = os.clock()
+
+    local qInfo = GetCurrentQuestInfo()
+    if not qInfo then return end
+
+    if HasActiveQuest() then
+        local activeHeader = GetActiveQuestName()
+        if activeHeader and not string.find(activeHeader, qInfo.MobName) then
+            AbandonCurrentQuest()
+            task.wait(0.5)
+        else
+            return
+        end
+    end
 
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
     if not hrp then return end
 
-    local qInfo = GetCurrentQuestInfo()
-    if not qInfo then return end
+    local targetNpcPos = qInfo.NpcPos + Vector3.new(0, 3, 0)
+    local dist = (targetNpcPos - hrp.Position).Magnitude
+    local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
 
-    local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
-    local startWait = os.clock()
-    while os.clock() - startWait < 0.2 do
-        hrp.CFrame = targetNpcCFrame
-        task.wait(0.05)
-    end
+    if ActiveTween then ActiveTween:Cancel() end
+    ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
+        CFrame = CFrame.new(targetNpcPos)
+    })
+    ActiveTween:Play()
+    task.wait(tweenTime)
 
     local CommF = GetCommF()
     if CommF then
@@ -431,38 +466,44 @@ local function StartFarm()
     task.spawn(function()
         while IsFarming do
             local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart
+            local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
             local hum = char and char:FindFirstChildOfClass("Humanoid")
 
             if hrp and hum and hum.Health > 0 then
                 EnablePhysics(hrp)
                 local qInfo = GetCurrentQuestInfo()
 
-                if CONFIG.AutoQuest and not HasActiveQuest() then
-                    TakeQuest()
+                if CONFIG.AutoQuest then
+                    local activeHeader = GetActiveQuestName()
+                    if not HasActiveQuest() or (activeHeader and not string.find(activeHeader, qInfo.MobName)) then
+                        TakeQuest()
+                    end
                 end
 
                 local target = GetTargetEnemy()
                 if target then
-                    local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart
+                    local targetHrp = target:FindFirstChild("HumanoidRootPart") :: BasePart?
                     local targetHum = target:FindFirstChildOfClass("Humanoid")
 
                     if targetHrp and targetHum and targetHum.Health > 0 then
                         local targetPos = targetHrp.Position + CONFIG.FarmOffset
                         local dist = (targetPos - hrp.Position).Magnitude
-                        local tweenTime = math.max(0.1, dist / CONFIG.TweenSpeed)
+                        local tweenTime = math.max(0.05, dist / CONFIG.TweenSpeed)
 
                         if ActiveTween then ActiveTween:Cancel() end
                         ActiveTween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {
                             CFrame = CFrame.lookAt(targetPos, targetHrp.Position)
                         })
                         ActiveTween:Play()
-
-                        if dist > 10 then task.wait(tweenTime) end
+                        
+                        local startTime = os.clock()
+                        while IsFarming and targetHum.Health > 0 and target.Parent and (os.clock() - startTime < tweenTime) do
+                            task.wait(0.03)
+                        end
 
                         while IsFarming and targetHum.Health > 0 and target.Parent do
                             hrp.CFrame = CFrame.lookAt(targetHrp.Position + CONFIG.FarmOffset, targetHrp.Position)
-                            task.wait(0.05)
+                            task.wait(0.03)
                         end
                     end
                 else
@@ -479,7 +520,7 @@ local function StartFarm()
                     end
                 end
             end
-            task.wait(0.1)
+            task.wait(0.05)
         end
         StopFarm()
     end)
