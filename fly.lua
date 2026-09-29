@@ -37,15 +37,7 @@ end
 local Net = SafeWaitForChild(SafeWaitForChild(ReplicatedStorage, "Modules"), "Net")
 local EnemiesFolder = SafeWaitForChild(workspace, "Enemies")
 local CharactersFolder = SafeWaitForChild(workspace, "Characters")
-
--- Hàm tìm CommF_ chuẩn xác và an toàn nhất
-local function GetCommF(): RemoteFunction?
-    local rem = ReplicatedStorage:FindFirstChild("CommF_")
-    if not rem then
-        rem = ReplicatedStorage:FindFirstChild("CommF_", true)
-    end
-    return rem :: RemoteFunction?
-end
+local CommF = ReplicatedStorage:FindFirstChild("CommF_", true) :: RemoteFunction?
 
 local RegisterAttack = SafeWaitForChild(Net, "RE/RegisterAttack")
 local RegisterHit = SafeWaitForChild(Net, "RE/RegisterHit")
@@ -136,13 +128,12 @@ local function EnableHaki()
     if not CONFIG.AutoHaki then return end
     local char = LocalPlayer.Character
     if char and not char:FindFirstChild("HasBuso") then
-        local CommF = GetCommF()
         if CommF then pcall(function() CommF:InvokeServer("Buso") end) end
     end
 end
 
 -- ================================================================= --
--- HỆ THỐNG FAST ATTACK CHẠY NGẦM
+-- HỆ THỐNG FAST ATTACK CHẠY NGẦM KHÔNG CẦN PHÍM BẬT/TẮT
 -- ================================================================= --
 local FastAttack = { Distance = 100 }
 
@@ -295,12 +286,8 @@ local function TakeQuest()
     if not hrp then return end
 
     local qInfo = GetCurrentQuestInfo()
-    if not qInfo then return end
-
     hrp.CFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
-    task.wait(0.3)
-
-    local CommF = GetCommF()
+    task.wait(0.2)
     if CommF then
         pcall(function()
             CommF:InvokeServer("StartQuest", qInfo.QuestName, qInfo.QuestLevel)
