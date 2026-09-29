@@ -27,11 +27,11 @@ local NoclipConn: RBXScriptConnection? = nil
 local BodyVel: BodyVelocity? = nil
 local LastQuestAttempt = 0
 
-local function SafeWaitForChild(parent: Instance, childName: string): Instance?
+local function SafeWaitForChild(parent, childName)
     local success, result = pcall(function()
         return parent:WaitForChild(childName)
     end)
-    return success and result or nil
+    return result
 end
 
 local Net = SafeWaitForChild(SafeWaitForChild(ReplicatedStorage, "Modules"), "Net")
@@ -51,7 +51,7 @@ local RegisterAttack = SafeWaitForChild(Net, "RE/RegisterAttack")
 local RegisterHit = SafeWaitForChild(Net, "RE/RegisterHit")
 
 -- ================================================================= --
--- DATABASE QUEST & TIỆN ÍCH GAME (ĐÃ CẬP NHẬT ĐỦ SEA 1, 2, 3)
+-- DATABASE QUEST & TIỆN ÍCH GAME (ĐÃ MỞ RỘNG SEA 1, 2, 3)
 -- ================================================================= --
 type QuestData = {
     Sea: number, MinLv: number, MaxLv: number,
@@ -210,28 +210,26 @@ end
 -- ================================================================= --
 local FastAttack = { Distance = 100 }
 
-local function IsAlive(character: Model?): boolean
-    return character ~= nil and character:FindFirstChild("Humanoid") ~= nil and (character:FindFirstChild("Humanoid") :: Humanoid).Health > 0
+local function IsAlive(character)
+    return character and character:FindFirstChild("Humanoid") and character.Humanoid.Health > 0
 end
 
-local function ProcessEnemies(OthersEnemies: { { Model, BasePart } }, Folder: Folder?)
-    local BasePart: BasePart? = nil
+local function ProcessEnemies(OthersEnemies, Folder)
+    local BasePart = nil
     if not Folder then return BasePart end
     for _, Enemy in ipairs(Folder:GetChildren()) do
-        if Enemy:IsA("Model") then
-            local Head = Enemy:FindFirstChild("Head") :: BasePart?
-            if Head and IsAlive(Enemy) and LocalPlayer:DistanceFromCharacter(Head.Position) < FastAttack.Distance then
-                if Enemy ~= LocalPlayer.Character then
-                    table.insert(OthersEnemies, { Enemy, Head })
-                    BasePart = Head
-                end
+        local Head = Enemy:FindFirstChild("Head")
+        if Head and IsAlive(Enemy) and LocalPlayer:DistanceFromCharacter(Head.Position) < FastAttack.Distance then
+            if Enemy ~= LocalPlayer.Character then
+                table.insert(OthersEnemies, { Enemy, Head })
+                BasePart = Head
             end
         end
     end
     return BasePart
 end
 
-function FastAttack:Attack(BasePart: BasePart?, OthersEnemies: { { Model, BasePart } })
+function FastAttack:Attack(BasePart, OthersEnemies)
     if not BasePart or #OthersEnemies == 0 then return end
     RegisterAttack:FireServer(CONFIG.ClickDelay)
     RegisterHit:FireServer(BasePart, OthersEnemies)
@@ -323,8 +321,16 @@ InfoLabel.Font = Enum.Font.GothamMedium
 InfoLabel.TextWrapped = true
 InfoLabel.Parent = MainFrame
 
+-- Cập nhật thông tin Sea & Level liên tục lên UI
+task.spawn(function()
+    while true do
+        InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel()
+        task.wait(1)
+    end
+end)
+
 -- ================================================================= --
--- LUỒNG AUTO FARM CHÍNH
+-- LUỒNG AUTO FARM & QUEST CHÍNH
 -- ================================================================= --
 local function EnablePhysics(hrp: BasePart)
     if not BodyVel or BodyVel.Parent ~= hrp then
@@ -361,8 +367,9 @@ local function TakeQuest()
     if not hrp then return end
 
     local qInfo = GetCurrentQuestInfo()
-    local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
+    if not qInfo then return end
 
+    local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
     local startWait = os.clock()
     while os.clock() - startWait < 0.2 do
         hrp.CFrame = targetNpcCFrame
