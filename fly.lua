@@ -21,7 +21,6 @@ local CONFIG = {
     QuestCooldown = 3.0,
     AutoHaki = true,
     ClickDelay = 0,
-    AutoHitbox = true,
     HitboxSize = Vector3.new(60, 60, 60),
     HitboxTransparency = 0.8,
 }
@@ -113,7 +112,6 @@ local QUEST_DATABASE: {QuestData} = {
     { Sea = 1, MinLv = 551, MaxLv = 624, QuestName = "SkyExp2Quest",  QuestLevel = 2, MobName = "Royal Soldier",        NpcPos = Vector3.new(-7905, 5611, -2280),MobPos = Vector3.new(-7835, 5607, -1770) },
     { Sea = 1, MinLv = 625, MaxLv = 649, QuestName = "FountainQuest", QuestLevel = 1, MobName = "Galley Pirate",        NpcPos = Vector3.new(5258, 38, 4050),    MobPos = Vector3.new(5585, 38, 3990) },
     { Sea = 1, MinLv = 650, MaxLv = 700, QuestName = "FountainQuest", QuestLevel = 2, MobName = "Galley Captain",       NpcPos = Vector3.new(5258, 38, 4050),    MobPos = Vector3.new(5645, 38, 4950) },
-    -- (Các Sea tiếp theo tự động tương thích theo level hiện tại)
 }
 
 local function GetPlayerLevel(): number
@@ -163,11 +161,9 @@ local function EnableHaki()
 end
 
 -- ================================================================= --
--- HỆ THỐNG FAST ATTACK (MỚI & CHUẨN XÁC 100%)
+-- HỆ THỐNG FAST ATTACK (CHUẨN XÁC 100%)
 -- ================================================================= --
-local FastAttack = {
-    Distance = 100,
-}
+local FastAttack = { Distance = 100 }
 
 local function IsAlive(character)
     return character and character:FindFirstChild("Humanoid") and character.Humanoid.Health > 0
@@ -211,7 +207,6 @@ function FastAttack:BladeHits()
     end
 end
 
--- Luồng Fast Attack chạy ngầm độc lập siêu tốc
 task.spawn(function()
     while true do
         if _G.FastAttack then
@@ -225,7 +220,7 @@ task.spawn(function()
 end)
 
 -- ================================================================= --
--- GIAO DIỆN HUB ĐIỀU KHIỂN CHÍNH
+-- GIAO DIỆN HUB ĐIỀU KHIỂN CHÍNH (ĐÃ CĂN LẠI DỄ NHÌN)
 -- ================================================================= --
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BloxFruitsHubOptimized"
@@ -233,11 +228,12 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game:GetService("CoreGui")
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 270, 0, 185)
-MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+MainFrame.Size = UDim2.new(0, 260, 0, 150)
+MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
+MainFrame.Draggable = true -- Có thể kéo thả bảng đi khắp màn hình
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
@@ -245,23 +241,23 @@ MainCorner.CornerRadius = UDim.new(0, 8)
 MainCorner.Parent = MainFrame
 
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -40, 0, 35)
-TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.Size = UDim2.new(1, -20, 0, 30)
+TitleLabel.Position = UDim2.new(0, 10, 0, 5)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ AUTO FARM & FAST ATTACK"
+TitleLabel.Text = "⚡ AUTO FARM HUB"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.TextSize = 11
+TitleLabel.TextSize = 13
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = MainFrame
 
 local FarmBtn = Instance.new("TextButton")
-FarmBtn.Size = UDim2.new(0.85, 0, 0, 38)
-FarmBtn.Position = UDim2.new(0.075, 0, 0, 40)
+FarmBtn.Size = UDim2.new(1, -20, 0, 45)
+FarmBtn.Position = UDim2.new(0, 10, 0, 40)
 FarmBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 FarmBtn.Text = "AUTO FARM: OFF"
 FarmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-FarmBtn.TextSize = 12
+FarmBtn.TextSize = 14
 FarmBtn.Font = Enum.Font.GothamBold
 FarmBtn.Parent = MainFrame
 
@@ -270,10 +266,10 @@ FarmBtnCorner.CornerRadius = UDim.new(0, 6)
 FarmBtnCorner.Parent = FarmBtn
 
 local InfoLabel = Instance.new("TextLabel")
-InfoLabel.Size = UDim2.new(1, -20, 0, 80)
-InfoLabel.Position = UDim2.new(0, 10, 0, 90)
+InfoLabel.Size = UDim2.new(1, -20, 0, 45)
+InfoLabel.Position = UDim2.new(0, 10, 0, 95)
 InfoLabel.BackgroundTransparency = 1
-InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel() .. "\nNhấn [End] để Bật/Tắt Fast Attack"
+InfoLabel.Text = "Sea: " .. GetCurrentSea() .. " | Lv: " .. GetPlayerLevel() .. "\n(Nhấn phím [End] để bật/tắt Fast Attack)"
 InfoLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
 InfoLabel.TextSize = 11
 InfoLabel.Font = Enum.Font.GothamMedium
@@ -281,7 +277,7 @@ InfoLabel.TextWrapped = true
 InfoLabel.Parent = MainFrame
 
 -- ================================================================= --
--- LUỒNG AUTO FARM CHÍNH (TWEEN & NHẬN QUEST)
+-- LUỒNG AUTO FARM CHÍNH
 -- ================================================================= --
 local function EnablePhysics(hrp: BasePart)
     if not BodyVel or BodyVel.Parent ~= hrp then
@@ -318,9 +314,7 @@ local function TakeQuest()
     if not hrp then return end
 
     local qInfo = GetCurrentQuestInfo()
-    local targetNpcCFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
-    
-    hrp.CFrame = targetNpcCFrame
+    hrp.CFrame = CFrame.new(qInfo.NpcPos + Vector3.new(0, 3, 0))
     task.wait(0.2)
     if CommF then
         pcall(function()
@@ -347,7 +341,6 @@ local function GetTargetEnemy(): Model?
                 local hrp = enemy:FindFirstChild("HumanoidRootPart") :: BasePart
 
                 if hum and hrp and hum.Health > 0 then
-                    -- Tự động mở rộng Hitbox quái để dễ đánh trúng
                     for _, part in ipairs(enemy:GetDescendants()) do
                         if part:IsA("BasePart") and (part.Name == "HumanoidRootPart" or part.Name == "Head") then
                             part.Size = CONFIG.HitboxSize
